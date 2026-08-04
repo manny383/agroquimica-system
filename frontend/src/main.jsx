@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Boxes, ClipboardList, Leaf, LogIn, PackagePlus, UserPlus, Users } from "lucide-react";
+import { Boxes, ClipboardList, Leaf, LogIn, UserPlus, Users } from "lucide-react";
 import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
@@ -13,6 +13,7 @@ function App() {
   const [inventario, setInventario] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
+  const [view, setView] = useState("dashboard");
   const [status, setStatus] = useState("");
 
   const headers = useMemo(() => ({
@@ -79,28 +80,6 @@ function App() {
     }
   }
 
-  async function handleQuickProduct(event) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      await api("/productos", {
-        method: "POST",
-        body: JSON.stringify({
-          sku: form.get("sku"),
-          nombre: form.get("nombre"),
-          unidad: form.get("unidad"),
-          precioVenta: form.get("precioVenta"),
-          stockMinimo: form.get("stockMinimo"),
-        }),
-      });
-      event.currentTarget.reset();
-      setStatus("Producto creado");
-      loadData();
-    } catch (error) {
-      setStatus(error.message);
-    }
-  }
-
   async function handleCreateUser(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -161,12 +140,23 @@ function App() {
       <aside>
         <div className="brand"><Leaf /> Agroquimica</div>
         <button onClick={() => { localStorage.removeItem("token"); setToken(""); }}>Cerrar sesion</button>
+        <nav className="side-nav">
+          <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
+            <Boxes size={18} /> Panel principal
+          </button>
+          <button className={view === "usuarios" ? "active" : ""} onClick={() => setView("usuarios")}>
+            <Users size={18} /> Usuarios
+          </button>
+          <button className={view === "pedidos" ? "active" : ""} onClick={() => setView("pedidos")}>
+            <ClipboardList size={18} /> Pedidos
+          </button>
+        </nav>
       </aside>
       <section className="content">
         <header>
           <div>
             <p>{user?.nombre || "Panel administrativo"}</p>
-            <h1>Inventario y pedidos</h1>
+            <h1>{viewTitles[view]}</h1>
           </div>
           {status && <span>{status}</span>}
         </header>
@@ -176,18 +166,16 @@ function App() {
           <Metric icon={<ClipboardList />} label="Pedidos" value={pedidos.length} />
           <Metric icon={<UserPlus />} label="Usuarios" value={usuarios.length} />
         </div>
-        <section className="grid">
-          <div className="panel">
-            <h2><PackagePlus size={18} /> Producto rapido</h2>
-            <form className="compact-form" onSubmit={handleQuickProduct}>
-              <input name="sku" placeholder="SKU" required />
-              <input name="nombre" placeholder="Nombre" required />
-              <input name="unidad" placeholder="Unidad" defaultValue="unidad" required />
-              <input name="precioVenta" type="number" step="0.01" placeholder="Precio" required />
-              <input name="stockMinimo" type="number" placeholder="Stock minimo" defaultValue="0" required />
-              <button type="submit">Guardar</button>
-            </form>
-          </div>
+        {view === "dashboard" && (
+          <>
+            <section className="dashboard-grid">
+              <InventoryPanel inventario={inventario} />
+              <RecentOrdersPanel pedidos={pedidos} />
+            </section>
+          </>
+        )}
+        {view === "usuarios" && (
+          <section className="management-grid">
           <div className="panel">
             <h2><UserPlus size={18} /> Usuario rapido</h2>
             <form className="compact-form" onSubmit={handleCreateUser}>
@@ -203,67 +191,106 @@ function App() {
               <button type="submit">Guardar</button>
             </form>
           </div>
-          <div className="panel">
-            <h2><Boxes size={18} /> Inventario</h2>
-            <table>
-              <thead>
-                <tr><th>Producto</th><th>Almacen</th><th>Cantidad</th></tr>
-              </thead>
-              <tbody>
-                {inventario.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.producto.nombre}</td>
-                    <td>{item.almacen.nombre}</td>
-                    <td>{item.cantidad}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <UsersPanel usuarios={usuarios} onToggleUser={handleToggleUser} />
         </section>
-        <section className="panel">
-          <h2><Users size={18} /> Usuarios</h2>
-          <table>
-            <thead>
-              <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Accion</th></tr>
-            </thead>
-            <tbody>
-              {usuarios.map((usuario) => (
-                <tr key={usuario.id}>
-                  <td>{usuario.nombre}</td>
-                  <td>{usuario.email}</td>
-                  <td>{usuario.rol}</td>
-                  <td>{usuario.activo ? "Activo" : "Inactivo"}</td>
-                  <td>
-                    <button className="table-action" onClick={() => handleToggleUser(usuario)}>
-                      {usuario.activo ? "Desactivar" : "Activar"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-        <section className="panel">
-          <h2><ClipboardList size={18} /> Pedidos recientes</h2>
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Cliente</th><th>Estado</th><th>Total</th></tr>
-            </thead>
-            <tbody>
-              {pedidos.map((pedido) => (
-                <tr key={pedido.id}>
-                  <td>#{pedido.id}</td>
-                  <td>{pedido.cliente.nombre}</td>
-                  <td>{pedido.estado}</td>
-                  <td>Q {Number(pedido.total).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        )}
+        {view === "pedidos" && <OrdersPanel pedidos={pedidos} />}
       </section>
     </main>
+  );
+}
+
+const viewTitles = {
+  dashboard: "Inventario y pedidos",
+  usuarios: "Gestion de usuarios",
+  pedidos: "Gestion de pedidos",
+};
+
+function InventoryPanel({ inventario }) {
+  return (
+    <section className="panel">
+      <h2><Boxes size={18} /> Inventario</h2>
+      <table>
+        <thead>
+          <tr><th>Producto</th><th>Almacen</th><th>Cantidad</th></tr>
+        </thead>
+        <tbody>
+          {inventario.map((item) => (
+            <tr key={item.id}>
+              <td>{item.producto.nombre}</td>
+              <td>{item.almacen.nombre}</td>
+              <td>{item.cantidad}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function RecentOrdersPanel({ pedidos }) {
+  return (
+    <section className="panel">
+      <h2><ClipboardList size={18} /> Pedidos recientes</h2>
+      <OrdersTable pedidos={pedidos.slice(0, 8)} />
+    </section>
+  );
+}
+
+function UsersPanel({ usuarios, onToggleUser }) {
+  return (
+    <section className="panel">
+      <h2><Users size={18} /> Usuarios</h2>
+      <table>
+        <thead>
+          <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Accion</th></tr>
+        </thead>
+        <tbody>
+          {usuarios.map((usuario) => (
+            <tr key={usuario.id}>
+              <td>{usuario.nombre}</td>
+              <td>{usuario.email}</td>
+              <td>{usuario.rol}</td>
+              <td>{usuario.activo ? "Activo" : "Inactivo"}</td>
+              <td>
+                <button className="table-action" onClick={() => onToggleUser(usuario)}>
+                  {usuario.activo ? "Desactivar" : "Activar"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function OrdersPanel({ pedidos }) {
+  return (
+    <section className="panel">
+      <h2><ClipboardList size={18} /> Pedidos</h2>
+      <OrdersTable pedidos={pedidos} />
+    </section>
+  );
+}
+
+function OrdersTable({ pedidos }) {
+  return (
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Cliente</th><th>Estado</th><th>Total</th></tr>
+      </thead>
+      <tbody>
+        {pedidos.map((pedido) => (
+          <tr key={pedido.id}>
+            <td>#{pedido.id}</td>
+            <td>{pedido.cliente.nombre}</td>
+            <td>{pedido.estado}</td>
+            <td>Q {Number(pedido.total).toFixed(2)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
