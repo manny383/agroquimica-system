@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/app.js",
+    "build": "prisma generate",
+    "postinstall": "prisma generate",
+    "railway:start": "prisma db push && npm run seed && npm start",
     "start": "node src/app.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
