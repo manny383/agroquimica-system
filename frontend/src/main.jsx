@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Boxes, ClipboardList, Leaf, LogIn, PackagePlus, Users } from "lucide-react";
+import { Boxes, ClipboardList, Leaf, LogIn, PackagePlus, UserPlus, Users } from "lucide-react";
 import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
@@ -12,6 +12,7 @@ function App() {
   const [clientes, setClientes] = useState([]);
   const [inventario, setInventario] = useState([]);
   const [pedidos, setPedidos] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
   const [status, setStatus] = useState("");
 
   const headers = useMemo(() => ({
@@ -32,16 +33,18 @@ function App() {
   async function loadData() {
     if (!token) return;
     try {
-      const [productosData, clientesData, inventarioData, pedidosData] = await Promise.all([
+      const [productosData, clientesData, inventarioData, pedidosData, usuariosData] = await Promise.all([
         api("/productos"),
         api("/clientes"),
         api("/inventario"),
         api("/pedidos"),
+        api("/usuarios"),
       ]);
       setProductos(productosData);
       setClientes(clientesData);
       setInventario(inventarioData);
       setPedidos(pedidosData);
+      setUsuarios(usuariosData);
     } catch (error) {
       setStatus(error.message);
     }
@@ -98,6 +101,44 @@ function App() {
     }
   }
 
+  async function handleCreateUser(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await api("/usuarios", {
+        method: "POST",
+        body: JSON.stringify({
+          nombre: form.get("nombre"),
+          email: form.get("email"),
+          password: form.get("password"),
+          rol: form.get("rol"),
+        }),
+      });
+      event.currentTarget.reset();
+      setStatus("Usuario creado");
+      loadData();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
+  async function handleToggleUser(usuario) {
+    try {
+      if (usuario.activo) {
+        await api(`/usuarios/${usuario.id}`, { method: "DELETE" });
+      } else {
+        await api(`/usuarios/${usuario.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ activo: true }),
+        });
+      }
+      setStatus(usuario.activo ? "Usuario desactivado" : "Usuario activado");
+      loadData();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
   if (!token) {
     return (
       <main className="login-shell">
@@ -133,6 +174,7 @@ function App() {
           <Metric icon={<Boxes />} label="Productos" value={productos.length} />
           <Metric icon={<Users />} label="Clientes" value={clientes.length} />
           <Metric icon={<ClipboardList />} label="Pedidos" value={pedidos.length} />
+          <Metric icon={<UserPlus />} label="Usuarios" value={usuarios.length} />
         </div>
         <section className="grid">
           <div className="panel">
@@ -143,6 +185,21 @@ function App() {
               <input name="unidad" placeholder="Unidad" defaultValue="unidad" required />
               <input name="precioVenta" type="number" step="0.01" placeholder="Precio" required />
               <input name="stockMinimo" type="number" placeholder="Stock minimo" defaultValue="0" required />
+              <button type="submit">Guardar</button>
+            </form>
+          </div>
+          <div className="panel">
+            <h2><UserPlus size={18} /> Usuario rapido</h2>
+            <form className="compact-form" onSubmit={handleCreateUser}>
+              <input name="nombre" placeholder="Nombre" required />
+              <input name="email" type="email" placeholder="Correo" required />
+              <input name="password" type="password" placeholder="Contrasena" required />
+              <select name="rol" defaultValue="VENDEDOR" required>
+                <option value="ADMIN">Administrador</option>
+                <option value="VENDEDOR">Vendedor</option>
+                <option value="ALMACEN">Almacen</option>
+                <option value="CLIENTE">Cliente</option>
+              </select>
               <button type="submit">Guardar</button>
             </form>
           </div>
@@ -163,6 +220,29 @@ function App() {
               </tbody>
             </table>
           </div>
+        </section>
+        <section className="panel">
+          <h2><Users size={18} /> Usuarios</h2>
+          <table>
+            <thead>
+              <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Accion</th></tr>
+            </thead>
+            <tbody>
+              {usuarios.map((usuario) => (
+                <tr key={usuario.id}>
+                  <td>{usuario.nombre}</td>
+                  <td>{usuario.email}</td>
+                  <td>{usuario.rol}</td>
+                  <td>{usuario.activo ? "Activo" : "Inactivo"}</td>
+                  <td>
+                    <button className="table-action" onClick={() => handleToggleUser(usuario)}>
+                      {usuario.activo ? "Desactivar" : "Activar"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </section>
         <section className="panel">
           <h2><ClipboardList size={18} /> Pedidos recientes</h2>

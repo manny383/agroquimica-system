@@ -11,6 +11,7 @@ enum Role {
   ADMIN
   VENDEDOR
   ALMACEN
+  CLIENTE
 }
 
 enum PedidoEstado {

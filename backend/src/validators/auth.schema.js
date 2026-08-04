@@ -5,7 +5,7 @@ export const registerSchema = z.object({
     nombre: z.string().min(2),
     email: z.email(),
     password: z.string().min(6),
-    rol: z.enum(["ADMIN", "VENDEDOR", "ALMACEN"]).default("VENDEDOR"),
+    rol: z.enum(["ADMIN", "VENDEDOR", "ALMACEN", "CLIENTE"]).default("VENDEDOR"),
   }),
 });
 

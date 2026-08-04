@@ -6,7 +6,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 
 button {
   align-items: center;
@@ -22,9 +22,10 @@ button {
   padding: 0 14px;
 }
 
-input {
+input, select {
   border: 1px solid #cad4c6;
   border-radius: 6px;
+  background: white;
   min-height: 40px;
   padding: 0 12px;
   width: 100%;
@@ -96,7 +97,7 @@ header span {
 .metrics {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 18px;
 }
 
@@ -121,7 +122,7 @@ header span {
 .grid {
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(280px, 380px) 1fr;
+  grid-template-columns: repeat(2, minmax(280px, 380px)) 1fr;
   margin-bottom: 18px;
 }
 
@@ -153,6 +154,11 @@ th {
   color: #637064;
   font-size: 13px;
   font-weight: 600;
+}
+
+.table-action {
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 @media (max-width: 820px) {
