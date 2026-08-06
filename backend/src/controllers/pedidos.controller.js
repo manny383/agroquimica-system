@@ -1,8 +1,15 @@
 import { prisma } from "../config/prisma.js";
 
-export async function listPedidos(_req, res, next) {
+export async function listPedidos(req, res, next) {
   try {
+    const where = req.user.rol === "CLIENTE" ? { clienteId: req.user.clienteId } : {};
+
+    if (req.user.rol === "CLIENTE" && !req.user.clienteId) {
+      return res.status(403).json({ message: "Usuario cliente sin cliente asociado" });
+    }
+
     const pedidos = await prisma.pedido.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       include: { cliente: true, vendedor: true, detalles: { include: { producto: true } } },
     });

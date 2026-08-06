@@ -83,18 +83,49 @@ function App() {
   async function handleCreateUser(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const rol = form.get("rol");
+    const clienteId = form.get("clienteId");
+    const payload = {
+      nombre: form.get("nombre"),
+      email: form.get("email"),
+      password: form.get("password"),
+      rol,
+    };
+
+    if (rol === "CLIENTE" && clienteId) {
+      payload.clienteId = clienteId;
+    }
+
     try {
       await api("/usuarios", {
         method: "POST",
-        body: JSON.stringify({
-          nombre: form.get("nombre"),
-          email: form.get("email"),
-          password: form.get("password"),
-          rol: form.get("rol"),
-        }),
+        body: JSON.stringify(payload),
       });
       event.currentTarget.reset();
       setStatus("Usuario creado");
+      loadData();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
+  async function handleCreateCliente(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await api("/clientes", {
+        method: "POST",
+        body: JSON.stringify({
+          nombre: form.get("nombre"),
+          empresa: form.get("empresa"),
+          telefono: form.get("telefono"),
+          direccion: form.get("direccion"),
+          rfc: form.get("rfc"),
+          limiteCredito: form.get("limiteCredito"),
+        }),
+      });
+      event.currentTarget.reset();
+      setStatus("Cliente creado");
       loadData();
     } catch (error) {
       setStatus(error.message);
@@ -147,6 +178,9 @@ function App() {
           <button className={view === "usuarios" ? "active" : ""} onClick={() => setView("usuarios")}>
             <Users size={18} /> Usuarios
           </button>
+          <button className={view === "clientes" ? "active" : ""} onClick={() => setView("clientes")}>
+            <UserPlus size={18} /> Clientes
+          </button>
           <button className={view === "pedidos" ? "active" : ""} onClick={() => setView("pedidos")}>
             <ClipboardList size={18} /> Pedidos
           </button>
@@ -188,11 +222,34 @@ function App() {
                 <option value="ALMACEN">Almacen</option>
                 <option value="CLIENTE">Cliente</option>
               </select>
+              <select name="clienteId" defaultValue="">
+                <option value="">Cliente asociado</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>
+                ))}
+              </select>
               <button type="submit">Guardar</button>
             </form>
           </div>
           <UsersPanel usuarios={usuarios} onToggleUser={handleToggleUser} />
         </section>
+        )}
+        {view === "clientes" && (
+          <section className="management-grid">
+            <div className="panel">
+              <h2><UserPlus size={18} /> Cliente rapido</h2>
+              <form className="compact-form" onSubmit={handleCreateCliente}>
+                <input name="nombre" placeholder="Nombre" required />
+                <input name="empresa" placeholder="Empresa" />
+                <input name="telefono" placeholder="Telefono" />
+                <input name="direccion" placeholder="Direccion" />
+                <input name="rfc" placeholder="RFC" />
+                <input name="limiteCredito" type="number" min="0" step="0.01" placeholder="Limite de credito" defaultValue="0" />
+                <button type="submit">Guardar</button>
+              </form>
+            </div>
+            <ClientsPanel clientes={clientes} />
+          </section>
         )}
         {view === "pedidos" && <OrdersPanel pedidos={pedidos} />}
       </section>
@@ -203,6 +260,7 @@ function App() {
 const viewTitles = {
   dashboard: "Inventario y pedidos",
   usuarios: "Gestion de usuarios",
+  clientes: "Gestion de clientes",
   pedidos: "Gestion de pedidos",
 };
 
@@ -243,7 +301,7 @@ function UsersPanel({ usuarios, onToggleUser }) {
       <h2><Users size={18} /> Usuarios</h2>
       <table>
         <thead>
-          <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Accion</th></tr>
+          <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Cliente</th><th>Estado</th><th>Accion</th></tr>
         </thead>
         <tbody>
           {usuarios.map((usuario) => (
@@ -251,12 +309,38 @@ function UsersPanel({ usuarios, onToggleUser }) {
               <td>{usuario.nombre}</td>
               <td>{usuario.email}</td>
               <td>{usuario.rol}</td>
+              <td>{usuario.cliente?.nombre || "-"}</td>
               <td>{usuario.activo ? "Activo" : "Inactivo"}</td>
               <td>
                 <button className="table-action" onClick={() => onToggleUser(usuario)}>
                   {usuario.activo ? "Desactivar" : "Activar"}
                 </button>
               </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function ClientsPanel({ clientes }) {
+  return (
+    <section className="panel">
+      <h2><Users size={18} /> Clientes</h2>
+      <table>
+        <thead>
+          <tr><th>Nombre</th><th>Empresa</th><th>Telefono</th><th>Credito</th><th>Saldo</th><th>Estado</th></tr>
+        </thead>
+        <tbody>
+          {clientes.map((cliente) => (
+            <tr key={cliente.id}>
+              <td>{cliente.nombre}</td>
+              <td>{cliente.empresa || "-"}</td>
+              <td>{cliente.telefono || "-"}</td>
+              <td>Q {Number(cliente.limiteCredito).toFixed(2)}</td>
+              <td>Q {Number(cliente.saldoPendiente).toFixed(2)}</td>
+              <td>{cliente.activo ? "Activo" : "Inactivo"}</td>
             </tr>
           ))}
         </tbody>

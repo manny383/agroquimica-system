@@ -7,6 +7,8 @@ const userSelect = {
   email: true,
   rol: true,
   activo: true,
+  clienteId: true,
+  cliente: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -50,6 +52,14 @@ export async function createUsuario(req, res, next) {
       return res.status(409).json({ message: "El correo ya esta registrado" });
     }
 
+    if (data.clienteId) {
+      const cliente = await prisma.cliente.findUnique({ where: { id: data.clienteId } });
+
+      if (!cliente) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
+      }
+    }
+
     const usuario = await prisma.usuario.create({
       data: {
         ...data,
@@ -69,8 +79,33 @@ export async function updateUsuario(req, res, next) {
     const { id } = req.validated.params;
     const { password, ...data } = req.validated.body;
 
+    const current = await prisma.usuario.findUnique({ where: { id } });
+
+    if (!current) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
     if (password) {
       data.password = await bcrypt.hash(password, 10);
+    }
+
+    if (data.clienteId) {
+      const cliente = await prisma.cliente.findUnique({ where: { id: data.clienteId } });
+
+      if (!cliente) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
+      }
+    }
+
+    const nextRole = data.rol || current.rol;
+    const nextClienteId = data.clienteId === undefined ? current.clienteId : data.clienteId;
+
+    if (nextRole === "CLIENTE" && !nextClienteId) {
+      return res.status(400).json({ message: "Debes asociar un cliente al usuario con rol CLIENTE" });
+    }
+
+    if (nextRole !== "CLIENTE" && nextClienteId) {
+      return res.status(400).json({ message: "Solo los usuarios CLIENTE pueden tener clienteId" });
     }
 
     const usuario = await prisma.usuario.update({

@@ -36,9 +36,11 @@ model Usuario {
   password  String
   rol       Role     @default(VENDEDOR)
   activo    Boolean  @default(true)
+  clienteId Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  cliente Cliente? @relation(fields: [clienteId], references: [id])
   pedidos Pedido[]
 }
 
@@ -120,7 +122,8 @@ model Cliente {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  pedidos Pedido[]
+  usuarios Usuario[]
+  pedidos  Pedido[]
 }
 
 model Pedido {
