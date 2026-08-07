@@ -27,6 +27,13 @@ function App() {
       headers: { ...headers, ...options.headers },
     });
     const data = await response.json();
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      setToken("");
+      setUser(null);
+      throw new Error("Sesion vencida. Inicia sesion otra vez.");
+    }
+
     if (!response.ok) throw new Error(data.message || "Error de API");
     return data;
   }
@@ -82,7 +89,8 @@ function App() {
 
   async function handleCreateUser(event) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const rol = form.get("rol");
     const clienteId = form.get("clienteId");
     const payload = {
@@ -101,7 +109,7 @@ function App() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setStatus("Usuario creado");
       loadData();
     } catch (error) {
@@ -111,7 +119,8 @@ function App() {
 
   async function handleCreateCliente(event) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       await api("/clientes", {
         method: "POST",
@@ -124,7 +133,7 @@ function App() {
           limiteCredito: form.get("limiteCredito"),
         }),
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setStatus("Cliente creado");
       loadData();
     } catch (error) {

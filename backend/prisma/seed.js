@@ -8,7 +8,13 @@ async function main() {
 
   await prisma.usuario.upsert({
     where: { email: "admin@agroquimica.local" },
-    update: {},
+    update: {
+      nombre: "Administrador",
+      password,
+      rol: "ADMIN",
+      activo: true,
+      clienteId: null,
+    },
     create: {
       nombre: "Administrador",
       email: "admin@agroquimica.local",
