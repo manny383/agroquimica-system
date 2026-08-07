@@ -389,8 +389,8 @@ function App() {
                 </label>
                 <label>
                   Almacen inicial
-                  <select name="almacenId" defaultValue="">
-                    <option value="">Sin inventario inicial</option>
+                  <select name="almacenId" defaultValue="" required>
+                    <option value="">Selecciona un almacen</option>
                     {almacenes.map((almacen) => (
                       <option key={almacen.id} value={almacen.id}>{almacen.nombre}</option>
                     ))}
@@ -398,7 +398,7 @@ function App() {
                 </label>
                 <label>
                   Cantidad inicial
-                  <input name="cantidadInicial" type="number" min="0" step="1" placeholder="Cantidad inicial" />
+                  <input name="cantidadInicial" type="number" min="1" step="1" placeholder="Cantidad inicial" required />
                 </label>
                 <label>
                   Nota de inventario
