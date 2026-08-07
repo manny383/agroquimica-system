@@ -13,6 +13,8 @@ function App() {
   const [productos, setProductos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [almacenes, setAlmacenes] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [marcas, setMarcas] = useState([]);
   const [inventario, setInventario] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -45,10 +47,12 @@ function App() {
   async function loadData() {
     if (!token) return;
     try {
-      const [productosData, clientesData, almacenesData, inventarioData, pedidosData, usuariosData] = await Promise.all([
+      const [productosData, clientesData, almacenesData, categoriasData, marcasData, inventarioData, pedidosData, usuariosData] = await Promise.all([
         api("/productos"),
         api("/clientes"),
         api("/almacenes"),
+        api("/categorias"),
+        api("/marcas"),
         api("/inventario"),
         api("/pedidos"),
         api("/usuarios"),
@@ -56,6 +60,8 @@ function App() {
       setProductos(productosData);
       setClientes(clientesData);
       setAlmacenes(almacenesData);
+      setCategorias(categoriasData);
+      setMarcas(marcasData);
       setInventario(inventarioData);
       setPedidos(pedidosData);
       setUsuarios(usuariosData);
@@ -167,6 +173,80 @@ function App() {
     }
   }
 
+  async function handleCreateProductWithInventory(event) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const almacenId = form.get("almacenId");
+    const cantidadInicial = form.get("cantidadInicial");
+    const categoriaId = form.get("categoriaId");
+    const categoriaNueva = form.get("categoriaNueva")?.trim();
+    const marcaId = form.get("marcaId");
+    const marcaNueva = form.get("marcaNueva")?.trim();
+    const payload = {
+      sku: form.get("sku"),
+      nombre: form.get("nombre"),
+      descripcion: form.get("descripcion"),
+      unidad: form.get("unidad"),
+      precioVenta: form.get("precioVenta"),
+      stockMinimo: form.get("stockMinimo"),
+    };
+
+    if (almacenId && cantidadInicial !== "") {
+      payload.inventarioInicial = {
+        almacenId,
+        cantidad: cantidadInicial,
+        nota: form.get("nota"),
+      };
+    }
+
+    try {
+      if (categoriaNueva) {
+        const categoria = await api("/categorias", {
+          method: "POST",
+          body: JSON.stringify({ nombre: categoriaNueva }),
+        });
+        payload.categoriaId = categoria.id;
+      } else if (categoriaId) {
+        payload.categoriaId = categoriaId;
+      }
+
+      if (marcaNueva) {
+        const marca = await api("/marcas", {
+          method: "POST",
+          body: JSON.stringify({ nombre: marcaNueva }),
+        });
+        payload.marcaId = marca.id;
+      } else if (marcaId) {
+        payload.marcaId = marcaId;
+      }
+
+      const producto = await api("/productos", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      if (payload.inventarioInicial && !producto.inventario?.length) {
+        await api("/inventario/ajustes", {
+          method: "POST",
+          body: JSON.stringify({
+            productoId: producto.id,
+            almacenId: payload.inventarioInicial.almacenId,
+            tipo: "ENTRADA",
+            cantidad: payload.inventarioInicial.cantidad,
+            nota: payload.inventarioInicial.nota || "Inventario inicial",
+          }),
+        });
+      }
+
+      formElement.reset();
+      setStatus("Producto e inventario creados");
+      loadData();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
   async function handleToggleUser(usuario) {
     try {
       if (usuario.activo) {
@@ -255,6 +335,79 @@ function App() {
         {view === "inventario" && (
           <section className="management-grid">
             <div className="panel">
+              <h2><Boxes size={18} /> Producto nuevo</h2>
+              <form className="compact-form" onSubmit={handleCreateProductWithInventory}>
+                <label>
+                  SKU
+                  <input name="sku" placeholder="SKU" required />
+                </label>
+                <label>
+                  Nombre del producto
+                  <input name="nombre" placeholder="Nombre del producto" required />
+                </label>
+                <label>
+                  Descripcion
+                  <input name="descripcion" placeholder="Descripcion" />
+                </label>
+                <label>
+                  Unidad
+                  <input name="unidad" placeholder="Unidad" defaultValue="unidad" required />
+                </label>
+                <label>
+                  Categoria
+                  <select name="categoriaId" defaultValue="">
+                    <option value="">Sin categoria</option>
+                    {categorias.map((categoria) => (
+                      <option key={categoria.id} value={categoria.id}>{categoria.nombre}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Nueva categoria
+                  <input name="categoriaNueva" placeholder="Ej. Fertilizantes" />
+                </label>
+                <label>
+                  Marca
+                  <select name="marcaId" defaultValue="">
+                    <option value="">Sin marca</option>
+                    {marcas.map((marca) => (
+                      <option key={marca.id} value={marca.id}>{marca.nombre}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Nueva marca
+                  <input name="marcaNueva" placeholder="Ej. Bayer" />
+                </label>
+                <label>
+                  Precio de venta
+                  <input name="precioVenta" type="number" min="0.01" step="0.01" placeholder="Precio de venta" required />
+                </label>
+                <label>
+                  Stock minimo
+                  <input name="stockMinimo" type="number" min="0" step="1" placeholder="Stock minimo" defaultValue="0" />
+                </label>
+                <label>
+                  Almacen inicial
+                  <select name="almacenId" defaultValue="">
+                    <option value="">Sin inventario inicial</option>
+                    {almacenes.map((almacen) => (
+                      <option key={almacen.id} value={almacen.id}>{almacen.nombre}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Cantidad inicial
+                  <input name="cantidadInicial" type="number" min="0" step="1" placeholder="Cantidad inicial" />
+                </label>
+                <label>
+                  Nota de inventario
+                  <input name="nota" placeholder="Nota de inventario" />
+                </label>
+                <button type="submit">Crear producto</button>
+              </form>
+            </div>
+            <div className="panel">
               <h2><Boxes size={18} /> Ajuste de inventario</h2>
               <form className="compact-form" onSubmit={handleAdjustInventory}>
                 <select name="productoId" defaultValue="" required>
@@ -279,7 +432,9 @@ function App() {
                 <button type="submit">Guardar</button>
               </form>
             </div>
-            <InventoryPanel inventario={inventario} />
+            <div className="wide-panel">
+              <InventoryPanel inventario={inventario} />
+            </div>
           </section>
         )}
         {view === "usuarios" && (
@@ -425,13 +580,15 @@ function ProductsPanel({ productos }) {
       <h2><Boxes size={18} /> Productos</h2>
       <table>
         <thead>
-          <tr><th>SKU</th><th>Nombre</th><th>Unidad</th><th>Precio</th><th>Stock minimo</th><th>Estado</th></tr>
+          <tr><th>SKU</th><th>Nombre</th><th>Categoria</th><th>Marca</th><th>Unidad</th><th>Precio</th><th>Stock minimo</th><th>Estado</th></tr>
         </thead>
         <tbody>
           {productos.map((producto) => (
             <tr key={producto.id}>
               <td>{producto.sku}</td>
               <td>{producto.nombre}</td>
+              <td>{producto.categoria?.nombre || "-"}</td>
+              <td>{producto.marca?.nombre || "-"}</td>
               <td>{producto.unidad}</td>
               <td>Q {Number(producto.precioVenta).toFixed(2)}</td>
               <td>{producto.stockMinimo}</td>

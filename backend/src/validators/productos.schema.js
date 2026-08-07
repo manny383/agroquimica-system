@@ -10,5 +10,10 @@ export const createProductoSchema = z.object({
     stockMinimo: z.coerce.number().int().min(0).default(0),
     categoriaId: z.coerce.number().int().positive().optional(),
     marcaId: z.coerce.number().int().positive().optional(),
+    inventarioInicial: z.object({
+      almacenId: z.coerce.number().int().positive(),
+      cantidad: z.coerce.number().int().min(0),
+      nota: z.string().optional(),
+    }).optional(),
   }),
 });

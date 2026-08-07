@@ -15,7 +15,37 @@ export async function listProductos(_req, res, next) {
 
 export async function createProducto(req, res, next) {
   try {
-    const producto = await prisma.producto.create({ data: req.validated.body });
+    const { inventarioInicial, ...data } = req.validated.body;
+
+    const producto = await prisma.$transaction(async (tx) => {
+      const created = await tx.producto.create({ data });
+
+      if (inventarioInicial && inventarioInicial.cantidad > 0) {
+        await tx.inventario.create({
+          data: {
+            productoId: created.id,
+            almacenId: inventarioInicial.almacenId,
+            cantidad: inventarioInicial.cantidad,
+          },
+        });
+
+        await tx.movimientoInventario.create({
+          data: {
+            productoId: created.id,
+            tipo: "ENTRADA",
+            cantidad: inventarioInicial.cantidad,
+            nota: inventarioInicial.nota,
+            referencia: "PRODUCTO_NUEVO",
+          },
+        });
+      }
+
+      return tx.producto.findUnique({
+        where: { id: created.id },
+        include: { categoria: true, marca: true, inventario: { include: { almacen: true } } },
+      });
+    });
+
     return res.status(201).json(producto);
   } catch (error) {
     return next(error);

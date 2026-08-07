@@ -47,6 +47,13 @@ input, select {
 
 .login-panel h1 { margin: 10px 0 22px; }
 .login-panel form, .compact-form { display: grid; gap: 12px; }
+.compact-form label {
+  color: #4f5f52;
+  display: grid;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+}
 .status { color: #9a4b10; margin: 16px 0 0; }
 
 .app-shell {
@@ -187,6 +194,10 @@ header span {
 
 .management-grid {
   grid-template-columns: minmax(280px, 380px) 1fr;
+}
+
+.wide-panel {
+  grid-column: 1 / -1;
 }
 
 .panel {
