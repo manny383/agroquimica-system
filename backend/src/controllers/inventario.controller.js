@@ -24,7 +24,11 @@ export async function ajustarInventario(req, res, next) {
         update: {},
       });
 
-      const nuevaCantidad = tipo === "SALIDA" ? actual.cantidad - cantidad : actual.cantidad + cantidad;
+      const nuevaCantidad = tipo === "SALIDA"
+        ? actual.cantidad - cantidad
+        : tipo === "AJUSTE"
+          ? cantidad
+          : actual.cantidad + cantidad;
 
       if (nuevaCantidad < 0) {
         const error = new Error("Inventario insuficiente");

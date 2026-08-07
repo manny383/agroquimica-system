@@ -5,11 +5,14 @@ import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
+const savedUser = localStorage.getItem("user");
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token") || "");
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(savedUser ? JSON.parse(savedUser) : null);
   const [productos, setProductos] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [almacenes, setAlmacenes] = useState([]);
   const [inventario, setInventario] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -29,6 +32,7 @@ function App() {
     const data = await response.json();
     if (response.status === 401) {
       localStorage.removeItem("token");
+      localStorage.removeItem("user");
       setToken("");
       setUser(null);
       throw new Error("Sesion vencida. Inicia sesion otra vez.");
@@ -41,15 +45,17 @@ function App() {
   async function loadData() {
     if (!token) return;
     try {
-      const [productosData, clientesData, inventarioData, pedidosData, usuariosData] = await Promise.all([
+      const [productosData, clientesData, almacenesData, inventarioData, pedidosData, usuariosData] = await Promise.all([
         api("/productos"),
         api("/clientes"),
+        api("/almacenes"),
         api("/inventario"),
         api("/pedidos"),
         api("/usuarios"),
       ]);
       setProductos(productosData);
       setClientes(clientesData);
+      setAlmacenes(almacenesData);
       setInventario(inventarioData);
       setPedidos(pedidosData);
       setUsuarios(usuariosData);
@@ -79,6 +85,7 @@ function App() {
       if (!response.ok) throw new Error(data.message || "No se pudo iniciar sesion");
 
       localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
       setStatus("Sesion iniciada");
@@ -92,17 +99,12 @@ function App() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const rol = form.get("rol");
-    const clienteId = form.get("clienteId");
     const payload = {
       nombre: form.get("nombre"),
       email: form.get("email"),
       password: form.get("password"),
       rol,
     };
-
-    if (rol === "CLIENTE" && clienteId) {
-      payload.clienteId = clienteId;
-    }
 
     try {
       await api("/usuarios", {
@@ -135,6 +137,30 @@ function App() {
       });
       formElement.reset();
       setStatus("Cliente creado");
+      loadData();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
+  async function handleAdjustInventory(event) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+
+    try {
+      await api("/inventario/ajustes", {
+        method: "POST",
+        body: JSON.stringify({
+          productoId: form.get("productoId"),
+          almacenId: form.get("almacenId"),
+          tipo: form.get("tipo"),
+          cantidad: form.get("cantidad"),
+          nota: form.get("nota"),
+        }),
+      });
+      formElement.reset();
+      setStatus("Inventario actualizado");
       loadData();
     } catch (error) {
       setStatus(error.message);
@@ -179,10 +205,19 @@ function App() {
     <main className="app-shell">
       <aside>
         <div className="brand"><Leaf /> Agroquimica</div>
-        <button onClick={() => { localStorage.removeItem("token"); setToken(""); }}>Cerrar sesion</button>
+        <div className="session-card">
+          <p>Sesion iniciada</p>
+          <strong>{user?.nombre || "Usuario"}</strong>
+          <span>{user?.email}</span>
+          <small>{user?.rol}</small>
+        </div>
+        <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("user"); setToken(""); setUser(null); }}>Cerrar sesion</button>
         <nav className="side-nav">
           <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
             <Boxes size={18} /> Panel principal
+          </button>
+          <button className={view === "inventario" ? "active" : ""} onClick={() => setView("inventario")}>
+            <Boxes size={18} /> Inventario
           </button>
           <button className={view === "usuarios" ? "active" : ""} onClick={() => setView("usuarios")}>
             <Users size={18} /> Usuarios
@@ -204,10 +239,10 @@ function App() {
           {status && <span>{status}</span>}
         </header>
         <div className="metrics">
-          <Metric icon={<Boxes />} label="Productos" value={productos.length} />
-          <Metric icon={<Users />} label="Clientes" value={clientes.length} />
-          <Metric icon={<ClipboardList />} label="Pedidos" value={pedidos.length} />
-          <Metric icon={<UserPlus />} label="Usuarios" value={usuarios.length} />
+          <Metric icon={<Boxes />} label="Productos" value={productos.length} onClick={() => setView("productos")} />
+          <Metric icon={<Users />} label="Clientes" value={clientes.length} onClick={() => setView("clientes")} />
+          <Metric icon={<ClipboardList />} label="Pedidos" value={pedidos.length} onClick={() => setView("pedidos")} />
+          <Metric icon={<UserPlus />} label="Usuarios" value={usuarios.length} onClick={() => setView("usuarios")} />
         </div>
         {view === "dashboard" && (
           <>
@@ -216,6 +251,36 @@ function App() {
               <RecentOrdersPanel pedidos={pedidos} />
             </section>
           </>
+        )}
+        {view === "inventario" && (
+          <section className="management-grid">
+            <div className="panel">
+              <h2><Boxes size={18} /> Ajuste de inventario</h2>
+              <form className="compact-form" onSubmit={handleAdjustInventory}>
+                <select name="productoId" defaultValue="" required>
+                  <option value="">Producto</option>
+                  {productos.map((producto) => (
+                    <option key={producto.id} value={producto.id}>{producto.nombre}</option>
+                  ))}
+                </select>
+                <select name="almacenId" defaultValue="" required>
+                  <option value="">Almacen</option>
+                  {almacenes.map((almacen) => (
+                    <option key={almacen.id} value={almacen.id}>{almacen.nombre}</option>
+                  ))}
+                </select>
+                <select name="tipo" defaultValue="ENTRADA" required>
+                  <option value="ENTRADA">Entrada</option>
+                  <option value="SALIDA">Salida</option>
+                  <option value="AJUSTE">Ajuste exacto</option>
+                </select>
+                <input name="cantidad" type="number" min="1" step="1" placeholder="Cantidad" required />
+                <input name="nota" placeholder="Nota" />
+                <button type="submit">Guardar</button>
+              </form>
+            </div>
+            <InventoryPanel inventario={inventario} />
+          </section>
         )}
         {view === "usuarios" && (
           <section className="management-grid">
@@ -229,13 +294,6 @@ function App() {
                 <option value="ADMIN">Administrador</option>
                 <option value="VENDEDOR">Vendedor</option>
                 <option value="ALMACEN">Almacen</option>
-                <option value="CLIENTE">Cliente</option>
-              </select>
-              <select name="clienteId" defaultValue="">
-                <option value="">Cliente asociado</option>
-                {clientes.map((cliente) => (
-                  <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>
-                ))}
               </select>
               <button type="submit">Guardar</button>
             </form>
@@ -260,6 +318,7 @@ function App() {
             <ClientsPanel clientes={clientes} />
           </section>
         )}
+        {view === "productos" && <ProductsPanel productos={productos} />}
         {view === "pedidos" && <OrdersPanel pedidos={pedidos} />}
       </section>
     </main>
@@ -268,6 +327,8 @@ function App() {
 
 const viewTitles = {
   dashboard: "Inventario y pedidos",
+  inventario: "Gestion de inventario",
+  productos: "Gestion de productos",
   usuarios: "Gestion de usuarios",
   clientes: "Gestion de clientes",
   pedidos: "Gestion de pedidos",
@@ -358,6 +419,31 @@ function ClientsPanel({ clientes }) {
   );
 }
 
+function ProductsPanel({ productos }) {
+  return (
+    <section className="panel">
+      <h2><Boxes size={18} /> Productos</h2>
+      <table>
+        <thead>
+          <tr><th>SKU</th><th>Nombre</th><th>Unidad</th><th>Precio</th><th>Stock minimo</th><th>Estado</th></tr>
+        </thead>
+        <tbody>
+          {productos.map((producto) => (
+            <tr key={producto.id}>
+              <td>{producto.sku}</td>
+              <td>{producto.nombre}</td>
+              <td>{producto.unidad}</td>
+              <td>Q {Number(producto.precioVenta).toFixed(2)}</td>
+              <td>{producto.stockMinimo}</td>
+              <td>{producto.activo ? "Activo" : "Inactivo"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 function OrdersPanel({ pedidos }) {
   return (
     <section className="panel">
@@ -387,15 +473,15 @@ function OrdersTable({ pedidos }) {
   );
 }
 
-function Metric({ icon, label, value }) {
+function Metric({ icon, label, value, onClick }) {
   return (
-    <div className="metric">
+    <button className="metric" type="button" onClick={onClick}>
       {icon}
       <div>
         <p>{label}</p>
         <strong>{value}</strong>
       </div>
-    </div>
+    </button>
   );
 }
 
