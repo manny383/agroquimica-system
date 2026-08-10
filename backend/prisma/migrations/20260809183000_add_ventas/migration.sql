@@ -1,0 +1,33 @@
+CREATE TABLE `Venta` (
+  `id` INTEGER NOT NULL AUTO_INCREMENT,
+  `empleadoId` INTEGER NOT NULL,
+  `observaciones` VARCHAR(191) NULL,
+  `total` DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` DATETIME(3) NOT NULL,
+
+  PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `VentaDetalle` (
+  `id` INTEGER NOT NULL AUTO_INCREMENT,
+  `ventaId` INTEGER NOT NULL,
+  `productoId` INTEGER NOT NULL,
+  `cantidad` INTEGER NOT NULL,
+  `precioUnitario` DECIMAL(10, 2) NOT NULL,
+  `subtotal` DECIMAL(10, 2) NOT NULL,
+
+  PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+ALTER TABLE `Venta`
+  ADD CONSTRAINT `Venta_empleadoId_fkey`
+  FOREIGN KEY (`empleadoId`) REFERENCES `Usuario`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE `VentaDetalle`
+  ADD CONSTRAINT `VentaDetalle_ventaId_fkey`
+  FOREIGN KEY (`ventaId`) REFERENCES `Venta`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE `VentaDetalle`
+  ADD CONSTRAINT `VentaDetalle_productoId_fkey`
+  FOREIGN KEY (`productoId`) REFERENCES `Producto`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

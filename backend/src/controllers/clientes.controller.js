@@ -1,8 +1,9 @@
 import { prisma } from "../config/prisma.js";
 
-export async function listClientes(_req, res, next) {
+export async function listClientes(req, res, next) {
   try {
-    const clientes = await prisma.cliente.findMany({ orderBy: { nombre: "asc" } });
+    const where = req.user.rol === "CLIENTE" ? { id: req.user.clienteId } : {};
+    const clientes = await prisma.cliente.findMany({ where, orderBy: { nombre: "asc" } });
     return res.json(clientes);
   } catch (error) {
     return next(error);

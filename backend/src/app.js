@@ -10,6 +10,7 @@ import marcaRoutes from "./routes/marcas.routes.js";
 import pedidoRoutes from "./routes/pedidos.routes.js";
 import productoRoutes from "./routes/productos.routes.js";
 import usuarioRoutes from "./routes/usuarios.routes.js";
+import ventaRoutes from "./routes/ventas.routes.js";
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.use("/api/clientes", clienteRoutes);
 app.use("/api/inventario", inventarioRoutes);
 app.use("/api/pedidos", pedidoRoutes);
 app.use("/api/usuarios", usuarioRoutes);
+app.use("/api/ventas", ventaRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

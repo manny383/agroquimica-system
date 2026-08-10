@@ -6,15 +6,19 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
+    "mobile:sync": "npm run build && cap sync android",
+    "mobile:open": "cap open android",
     "preview": "vite preview",
     "start": "vite preview --host 0.0.0.0 --port $PORT"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@vitejs/plugin-react": "^4.7.0",
-    "vite": "^7.0.6",
+    "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "lucide-react": "^0.468.0"
-  },
-  "devDependencies": {}
+    "vite": "^7.0.6"
+  }
 }

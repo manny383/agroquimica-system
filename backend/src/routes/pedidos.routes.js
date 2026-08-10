@@ -7,7 +7,7 @@ import { createPedidoSchema, updateEstadoPedidoSchema } from "../validators/pedi
 const router = Router();
 
 router.get("/", requireAuth, listPedidos);
-router.post("/", requireAuth, requireRoles("ADMIN", "VENDEDOR"), validate(createPedidoSchema), createPedido);
+router.post("/", requireAuth, requireRoles("ADMIN", "VENDEDOR", "CLIENTE"), validate(createPedidoSchema), createPedido);
 router.patch("/:id/estado", requireAuth, requireRoles("ADMIN", "ALMACEN"), validate(updateEstadoPedidoSchema), updateEstadoPedido);
 
 export default router;

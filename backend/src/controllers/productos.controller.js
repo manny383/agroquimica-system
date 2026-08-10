@@ -1,8 +1,10 @@
 import { prisma } from "../config/prisma.js";
 
-export async function listProductos(_req, res, next) {
+export async function listProductos(req, res, next) {
   try {
+    const where = req.user.rol === "CLIENTE" ? { activo: true } : {};
     const productos = await prisma.producto.findMany({
+      where,
       orderBy: { nombre: "asc" },
       include: { categoria: true, marca: true, inventario: { include: { almacen: true } } },
     });

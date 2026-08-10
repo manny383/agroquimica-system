@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Boxes, ClipboardList, Leaf, LogIn, UserPlus, Users } from "lucide-react";
+import { Bell, Boxes, ClipboardList, Leaf, LogIn, ReceiptText, UserPlus, Users } from "lucide-react";
 import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
@@ -17,9 +17,16 @@ function App() {
   const [marcas, setMarcas] = useState([]);
   const [inventario, setInventario] = useState([]);
   const [pedidos, setPedidos] = useState([]);
+  const [ventas, setVentas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [view, setView] = useState("dashboard");
   const [status, setStatus] = useState("");
+  const pedidosPendientes = useMemo(
+    () => pedidos.filter((pedido) => pedido.estado === "PENDIENTE"),
+    [pedidos],
+  );
+  const isCliente = user?.rol === "CLIENTE";
+  const canUpdatePedidoEstado = ["ADMIN", "ALMACEN"].includes(user?.rol);
 
   const headers = useMemo(() => ({
     "Content-Type": "application/json",
@@ -47,7 +54,7 @@ function App() {
   async function loadData() {
     if (!token) return;
     try {
-      const [productosData, clientesData, almacenesData, categoriasData, marcasData, inventarioData, pedidosData, usuariosData] = await Promise.all([
+      const [productosData, clientesData, almacenesData, categoriasData, marcasData, inventarioData, pedidosData, usuariosData, ventasData] = await Promise.all([
         api("/productos"),
         api("/clientes"),
         api("/almacenes"),
@@ -55,7 +62,8 @@ function App() {
         api("/marcas"),
         api("/inventario"),
         api("/pedidos"),
-        api("/usuarios"),
+        user?.rol === "ADMIN" ? api("/usuarios") : Promise.resolve([]),
+        user?.rol === "CLIENTE" ? Promise.resolve([]) : api("/ventas"),
       ]);
       setProductos(productosData);
       setClientes(clientesData);
@@ -65,6 +73,7 @@ function App() {
       setInventario(inventarioData);
       setPedidos(pedidosData);
       setUsuarios(usuariosData);
+      setVentas(ventasData);
     } catch (error) {
       setStatus(error.message);
     }
@@ -72,7 +81,7 @@ function App() {
 
   useEffect(() => {
     loadData();
-  }, [token]);
+  }, [token, user?.rol]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -264,6 +273,69 @@ function App() {
     }
   }
 
+  async function handleCreatePedido(event) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const detalles = getFormDetalles(form);
+
+    const payload = {
+      observaciones: form.get("observaciones"),
+      detalles,
+    };
+    const clienteId = form.get("clienteId");
+
+    if (clienteId) {
+      payload.clienteId = clienteId;
+    }
+
+    try {
+      await api("/pedidos", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      formElement.reset();
+      setStatus("Pedido creado");
+      loadData();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
+  async function handleCreateVenta(event) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+
+    try {
+      await api("/ventas", {
+        method: "POST",
+        body: JSON.stringify({
+          observaciones: form.get("observaciones"),
+          detalles: getFormDetalles(form),
+        }),
+      });
+      formElement.reset();
+      setStatus("Venta registrada e inventario actualizado");
+      loadData();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
+  async function handleUpdatePedidoEstado(pedidoId, estado) {
+    try {
+      await api(`/pedidos/${pedidoId}/estado`, {
+        method: "PATCH",
+        body: JSON.stringify({ estado }),
+      });
+      setStatus("Estado de pedido actualizado");
+      loadData();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
   if (!token) {
     return (
       <main className="login-shell">
@@ -299,15 +371,24 @@ function App() {
           <button className={view === "inventario" ? "active" : ""} onClick={() => setView("inventario")}>
             <Boxes size={18} /> Inventario
           </button>
-          <button className={view === "usuarios" ? "active" : ""} onClick={() => setView("usuarios")}>
-            <Users size={18} /> Usuarios
-          </button>
-          <button className={view === "clientes" ? "active" : ""} onClick={() => setView("clientes")}>
-            <UserPlus size={18} /> Clientes
-          </button>
+          {user?.rol === "ADMIN" && (
+            <button className={view === "usuarios" ? "active" : ""} onClick={() => setView("usuarios")}>
+              <Users size={18} /> Usuarios
+            </button>
+          )}
+          {!isCliente && (
+            <button className={view === "clientes" ? "active" : ""} onClick={() => setView("clientes")}>
+              <UserPlus size={18} /> Clientes
+            </button>
+          )}
           <button className={view === "pedidos" ? "active" : ""} onClick={() => setView("pedidos")}>
             <ClipboardList size={18} /> Pedidos
           </button>
+          {!isCliente && (
+            <button className={view === "ventas" ? "active" : ""} onClick={() => setView("ventas")}>
+              <ReceiptText size={18} /> Ventas
+            </button>
+          )}
         </nav>
       </aside>
       <section className="content">
@@ -320,10 +401,16 @@ function App() {
         </header>
         <div className="metrics">
           <Metric icon={<Boxes />} label="Productos" value={productos.length} onClick={() => setView("productos")} />
-          <Metric icon={<Users />} label="Clientes" value={clientes.length} onClick={() => setView("clientes")} />
+          {!isCliente && <Metric icon={<Users />} label="Clientes" value={clientes.length} onClick={() => setView("clientes")} />}
           <Metric icon={<ClipboardList />} label="Pedidos" value={pedidos.length} onClick={() => setView("pedidos")} />
-          <Metric icon={<UserPlus />} label="Usuarios" value={usuarios.length} onClick={() => setView("usuarios")} />
+          {!isCliente && <Metric icon={<Bell />} label="Pendientes" value={pedidosPendientes.length} onClick={() => setView("pedidos")} />}
+          {!isCliente && <Metric icon={<ReceiptText />} label="Ventas" value={ventas.length} onClick={() => setView("ventas")} />}
         </div>
+        {!isCliente && pedidosPendientes.length > 0 && (
+          <button className="notification-banner" type="button" onClick={() => setView("pedidos")}>
+            <Bell size={18} /> Hay {pedidosPendientes.length} pedido(s) pendiente(s) por confirmar
+          </button>
+        )}
         {view === "dashboard" && (
           <>
             <section className="dashboard-grid">
@@ -474,7 +561,24 @@ function App() {
           </section>
         )}
         {view === "productos" && <ProductsPanel productos={productos} />}
-        {view === "pedidos" && <OrdersPanel pedidos={pedidos} />}
+        {view === "pedidos" && (
+          <OrdersPanel
+            clientes={clientes}
+            isCliente={isCliente}
+            canUpdatePedidoEstado={canUpdatePedidoEstado}
+            pedidos={pedidos}
+            productos={productos}
+            onCreatePedido={handleCreatePedido}
+            onUpdateEstado={handleUpdatePedidoEstado}
+          />
+        )}
+        {view === "ventas" && (
+          <SalesPanel
+            productos={productos}
+            ventas={ventas}
+            onCreateVenta={handleCreateVenta}
+          />
+        )}
       </section>
     </main>
   );
@@ -487,6 +591,7 @@ const viewTitles = {
   usuarios: "Gestion de usuarios",
   clientes: "Gestion de clientes",
   pedidos: "Gestion de pedidos",
+  ventas: "Gestion de ventas",
 };
 
 function InventoryPanel({ inventario }) {
@@ -574,55 +679,218 @@ function ClientsPanel({ clientes }) {
   );
 }
 
+function getAvailableStock(producto) {
+  return producto.inventario?.reduce((sum, item) => sum + item.cantidad, 0) || 0;
+}
+
+function getFormDetalles(form) {
+  const productoIds = form.getAll("productoId");
+  const cantidades = form.getAll("cantidad");
+
+  return productoIds
+    .map((productoId, index) => ({
+      productoId,
+      cantidad: cantidades[index],
+    }))
+    .filter((detalle) => detalle.productoId && Number(detalle.cantidad) > 0);
+}
+
 function ProductsPanel({ productos }) {
   return (
     <section className="panel">
       <h2><Boxes size={18} /> Productos</h2>
-      <table>
-        <thead>
-          <tr><th>SKU</th><th>Nombre</th><th>Categoria</th><th>Marca</th><th>Unidad</th><th>Precio</th><th>Stock minimo</th><th>Estado</th></tr>
-        </thead>
-        <tbody>
-          {productos.map((producto) => (
-            <tr key={producto.id}>
-              <td>{producto.sku}</td>
-              <td>{producto.nombre}</td>
-              <td>{producto.categoria?.nombre || "-"}</td>
-              <td>{producto.marca?.nombre || "-"}</td>
-              <td>{producto.unidad}</td>
-              <td>Q {Number(producto.precioVenta).toFixed(2)}</td>
-              <td>{producto.stockMinimo}</td>
-              <td>{producto.activo ? "Activo" : "Inactivo"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ProductsTable productos={productos} />
     </section>
   );
 }
 
-function OrdersPanel({ pedidos }) {
-  return (
-    <section className="panel">
-      <h2><ClipboardList size={18} /> Pedidos</h2>
-      <OrdersTable pedidos={pedidos} />
-    </section>
-  );
-}
-
-function OrdersTable({ pedidos }) {
+function ProductsTable({ productos }) {
   return (
     <table>
       <thead>
-        <tr><th>ID</th><th>Cliente</th><th>Estado</th><th>Total</th></tr>
+        <tr><th>SKU</th><th>Nombre</th><th>Categoria</th><th>Marca</th><th>Unidad</th><th>Disponible</th><th>Precio</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        {productos.map((producto) => (
+          <tr key={producto.id}>
+            <td>{producto.sku}</td>
+            <td>{producto.nombre}</td>
+            <td>{producto.categoria?.nombre || "-"}</td>
+            <td>{producto.marca?.nombre || "-"}</td>
+            <td>{producto.unidad}</td>
+            <td>{getAvailableStock(producto)}</td>
+            <td>Q {Number(producto.precioVenta).toFixed(2)}</td>
+            <td>{producto.activo ? "Activo" : "Inactivo"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+const pedidoEstados = ["BORRADOR", "PENDIENTE", "APROBADO", "SURTIDO", "ENTREGADO", "CANCELADO"];
+
+function OrdersPanel({ clientes, isCliente, canUpdatePedidoEstado, pedidos, productos, onCreatePedido, onUpdateEstado }) {
+  return (
+    <section className="management-grid">
+      <div className="panel">
+        <h2><ClipboardList size={18} /> {isCliente ? "Productos disponibles" : "Pedido nuevo"}</h2>
+        <form className="compact-form" onSubmit={onCreatePedido}>
+          {!isCliente && (
+            <label>
+              Cliente
+              <select name="clienteId" defaultValue="" required>
+                <option value="">Selecciona un cliente</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <OrderItemFields productos={productos} index={1} />
+          <OrderItemFields productos={productos} index={2} />
+          <OrderItemFields productos={productos} index={3} />
+          <label>
+            Observaciones
+            <input name="observaciones" placeholder="Nota del pedido" />
+          </label>
+          <button type="submit">Crear pedido</button>
+        </form>
+      </div>
+      <div className="panel">
+        <h2><ClipboardList size={18} /> {isCliente ? "Mis pedidos" : "Pedidos"}</h2>
+        <OrdersTable
+          pedidos={pedidos}
+          onUpdateEstado={canUpdatePedidoEstado ? onUpdateEstado : null}
+        />
+      </div>
+    </section>
+  );
+}
+
+function OrderItemFields({ productos, index }) {
+  const productosDisponibles = productos.filter((producto) => getAvailableStock(producto) > 0);
+
+  return (
+    <div className="order-item-row">
+      <label>
+        Producto {index}
+        <select name="productoId" defaultValue="" required={index === 1}>
+          <option value="">Selecciona un producto</option>
+          {productosDisponibles.map((producto) => (
+            <option key={producto.id} value={producto.id}>
+              {producto.nombre} - Q {Number(producto.precioVenta).toFixed(2)} - Disp. {getAvailableStock(producto)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Cantidad
+        <input name="cantidad" type="number" min="1" step="1" placeholder="0" required={index === 1} />
+      </label>
+    </div>
+  );
+}
+
+function OrdersTable({ pedidos, onUpdateEstado }) {
+  return (
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Cliente</th><th>Vendedor</th><th>Estado</th><th>Items</th><th>Total</th></tr>
       </thead>
       <tbody>
         {pedidos.map((pedido) => (
           <tr key={pedido.id}>
             <td>#{pedido.id}</td>
             <td>{pedido.cliente.nombre}</td>
-            <td>{pedido.estado}</td>
+            <td>{pedido.vendedor?.nombre || "-"}</td>
+            <td>
+              {onUpdateEstado ? (
+                <select
+                  className="table-select"
+                  value={pedido.estado}
+                  onChange={(event) => onUpdateEstado(pedido.id, event.target.value)}
+                >
+                  {pedidoEstados.map((estado) => (
+                    <option key={estado} value={estado}>{estado}</option>
+                  ))}
+                </select>
+              ) : pedido.estado}
+            </td>
+            <td>{pedido.detalles?.reduce((sum, detalle) => sum + detalle.cantidad, 0) || 0}</td>
             <td>Q {Number(pedido.total).toFixed(2)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SalesPanel({ productos, ventas, onCreateVenta }) {
+  const totalVendido = ventas.reduce((sum, venta) => sum + Number(venta.total), 0);
+  const productosVendidos = ventas.reduce(
+    (sum, venta) => sum + venta.detalles.reduce((detalleSum, detalle) => detalleSum + detalle.cantidad, 0),
+    0,
+  );
+
+  return (
+    <section className="sales-layout">
+      <div className="panel sales-summary">
+        <h2><ReceiptText size={18} /> Resumen de ventas</h2>
+        <div>
+          <p>Ventas cerradas</p>
+          <strong>{ventas.length}</strong>
+        </div>
+        <div>
+          <p>Total vendido</p>
+          <strong>Q {totalVendido.toFixed(2)}</strong>
+        </div>
+        <div>
+          <p>Productos vendidos</p>
+          <strong>{productosVendidos}</strong>
+        </div>
+      </div>
+      <section className="management-grid">
+        <div className="panel">
+          <h2><ReceiptText size={18} /> Nueva venta</h2>
+          <form className="compact-form" onSubmit={onCreateVenta}>
+            <OrderItemFields productos={productos} index={1} />
+            <OrderItemFields productos={productos} index={2} />
+            <OrderItemFields productos={productos} index={3} />
+            <label>
+              Observaciones
+              <input name="observaciones" placeholder="Nota de venta o referencia" />
+            </label>
+            <button type="submit">Registrar venta</button>
+          </form>
+        </div>
+        <div className="panel">
+          <h2><Boxes size={18} /> Productos disponibles</h2>
+          <ProductsTable productos={productos.filter((producto) => getAvailableStock(producto) > 0)} />
+        </div>
+      </section>
+      <div className="panel">
+        <h2><ReceiptText size={18} /> Ventas</h2>
+        <SalesTable ventas={ventas} />
+      </div>
+    </section>
+  );
+}
+
+function SalesTable({ ventas }) {
+  return (
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Empleado</th><th>Productos</th><th>Fecha</th><th>Total</th></tr>
+      </thead>
+      <tbody>
+        {ventas.map((venta) => (
+          <tr key={venta.id}>
+            <td>#{venta.id}</td>
+            <td>{venta.empleado?.nombre || "-"}</td>
+            <td>{venta.detalles.reduce((sum, detalle) => sum + detalle.cantidad, 0)}</td>
+            <td>{new Date(venta.createdAt).toLocaleDateString()}</td>
+            <td>Q {Number(venta.total).toFixed(2)}</td>
           </tr>
         ))}
       </tbody>

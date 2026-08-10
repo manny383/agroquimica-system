@@ -1,0 +1,8 @@
+{
+  "appId": "com.agroquimica.system",
+  "appName": "Agroquimica",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
