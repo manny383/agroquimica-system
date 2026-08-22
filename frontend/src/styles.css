@@ -54,6 +54,15 @@ input, select {
   font-weight: 600;
   gap: 6px;
 }
+
+.form-section-title {
+  border-top: 1px solid #edf1ea;
+  color: #18211b;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 4px;
+  padding-top: 14px;
+}
 .status { color: #9a4b10; margin: 16px 0 0; }
 
 .app-shell {
@@ -163,6 +172,12 @@ header span {
   width: 100%;
 }
 
+.notification-banner.danger {
+  background: #fff0ec;
+  border-color: #e7a18f;
+  color: #7a2417;
+}
+
 .metric, .panel {
   background: white;
   border: 1px solid #dde4d8;
@@ -258,6 +273,34 @@ header span {
   font-size: 18px;
   gap: 8px;
   margin: 0 0 16px;
+}
+
+.empty-state {
+  color: #637064;
+  margin: 0;
+}
+
+.movement-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.movement-badge.entrada {
+  background: #e6f4ea;
+  color: #1f6f43;
+}
+
+.movement-badge.salida {
+  background: #fff0ec;
+  color: #9a321f;
+}
+
+.movement-badge.ajuste {
+  background: #eef2ff;
+  color: #334ea1;
 }
 
 table {

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Bell, Boxes, ClipboardList, Leaf, LogIn, ReceiptText, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, Bell, Boxes, ClipboardList, History, Leaf, LogIn, ReceiptText, UserPlus, Users } from "lucide-react";
 import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
@@ -16,6 +16,7 @@ function App() {
   const [categorias, setCategorias] = useState([]);
   const [marcas, setMarcas] = useState([]);
   const [inventario, setInventario] = useState([]);
+  const [movimientosInventario, setMovimientosInventario] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [ventas, setVentas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -24,6 +25,16 @@ function App() {
   const pedidosPendientes = useMemo(
     () => pedidos.filter((pedido) => pedido.estado === "PENDIENTE"),
     [pedidos],
+  );
+  const productosStockBajo = useMemo(
+    () => productos
+      .map((producto) => ({
+        ...producto,
+        disponible: getAvailableStock(producto),
+      }))
+      .filter((producto) => producto.stockMinimo > 0 && producto.disponible <= producto.stockMinimo)
+      .sort((a, b) => (a.disponible - a.stockMinimo) - (b.disponible - b.stockMinimo)),
+    [productos],
   );
   const isCliente = user?.rol === "CLIENTE";
   const canUpdatePedidoEstado = ["ADMIN", "ALMACEN"].includes(user?.rol);
@@ -54,16 +65,17 @@ function App() {
   async function loadData() {
     if (!token) return;
     try {
-      const [productosData, clientesData, almacenesData, categoriasData, marcasData, inventarioData, pedidosData, usuariosData, ventasData] = await Promise.all([
+      const [productosData, clientesData, almacenesData, categoriasData, marcasData, inventarioData, movimientosData, pedidosData, usuariosData, ventasData] = await Promise.all([
         api("/productos"),
-        api("/clientes"),
-        api("/almacenes"),
-        api("/categorias"),
-        api("/marcas"),
-        api("/inventario"),
+        isCliente ? Promise.resolve([]) : api("/clientes"),
+        isCliente ? Promise.resolve([]) : api("/almacenes"),
+        isCliente ? Promise.resolve([]) : api("/categorias"),
+        isCliente ? Promise.resolve([]) : api("/marcas"),
+        isCliente ? Promise.resolve([]) : api("/inventario"),
+        isCliente ? Promise.resolve([]) : api("/inventario/movimientos"),
         api("/pedidos"),
         user?.rol === "ADMIN" ? api("/usuarios") : Promise.resolve([]),
-        user?.rol === "CLIENTE" ? Promise.resolve([]) : api("/ventas"),
+        isCliente ? Promise.resolve([]) : api("/ventas"),
       ]);
       setProductos(productosData);
       setClientes(clientesData);
@@ -71,6 +83,7 @@ function App() {
       setCategorias(categoriasData);
       setMarcas(marcasData);
       setInventario(inventarioData);
+      setMovimientosInventario(movimientosData);
       setPedidos(pedidosData);
       setUsuarios(usuariosData);
       setVentas(ventasData);
@@ -82,6 +95,12 @@ function App() {
   useEffect(() => {
     loadData();
   }, [token, user?.rol]);
+
+  useEffect(() => {
+    if (isCliente && !["productos", "pedidos"].includes(view)) {
+      setView("productos");
+    }
+  }, [isCliente, view]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -120,6 +139,11 @@ function App() {
       password: form.get("password"),
       rol,
     };
+    const clienteId = form.get("clienteId");
+
+    if (rol === "CLIENTE" && clienteId) {
+      payload.clienteId = clienteId;
+    }
 
     try {
       await api("/usuarios", {
@@ -138,20 +162,33 @@ function App() {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const usuarioNombre = form.get("usuarioNombre")?.trim();
+    const usuarioEmail = form.get("usuarioEmail")?.trim();
+    const usuarioPassword = form.get("usuarioPassword");
+    const payload = {
+      nombre: form.get("nombre"),
+      empresa: form.get("empresa"),
+      telefono: form.get("telefono"),
+      direccion: form.get("direccion"),
+      rfc: form.get("rfc"),
+      limiteCredito: form.get("limiteCredito"),
+    };
+
+    if (usuarioNombre || usuarioEmail || usuarioPassword) {
+      payload.usuario = {
+        nombre: usuarioNombre,
+        email: usuarioEmail,
+        password: usuarioPassword,
+      };
+    }
+
     try {
       await api("/clientes", {
         method: "POST",
-        body: JSON.stringify({
-          nombre: form.get("nombre"),
-          empresa: form.get("empresa"),
-          telefono: form.get("telefono"),
-          direccion: form.get("direccion"),
-          rfc: form.get("rfc"),
-          limiteCredito: form.get("limiteCredito"),
-        }),
+        body: JSON.stringify(payload),
       });
       formElement.reset();
-      setStatus("Cliente creado");
+      setStatus(payload.usuario ? "Cliente y usuario creados" : "Cliente creado");
       loadData();
     } catch (error) {
       setStatus(error.message);
@@ -171,6 +208,7 @@ function App() {
           almacenId: form.get("almacenId"),
           tipo: form.get("tipo"),
           cantidad: form.get("cantidad"),
+          motivo: form.get("motivo") || undefined,
           nota: form.get("nota"),
         }),
       });
@@ -365,12 +403,21 @@ function App() {
         </div>
         <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("user"); setToken(""); setUser(null); }}>Cerrar sesion</button>
         <nav className="side-nav">
-          <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
-            <Boxes size={18} /> Panel principal
-          </button>
-          <button className={view === "inventario" ? "active" : ""} onClick={() => setView("inventario")}>
-            <Boxes size={18} /> Inventario
-          </button>
+          {!isCliente && (
+            <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
+              <Boxes size={18} /> Panel principal
+            </button>
+          )}
+          {!isCliente && (
+            <button className={view === "inventario" ? "active" : ""} onClick={() => setView("inventario")}>
+              <Boxes size={18} /> Inventario
+            </button>
+          )}
+          {isCliente && (
+            <button className={view === "productos" ? "active" : ""} onClick={() => setView("productos")}>
+              <Boxes size={18} /> Productos disponibles
+            </button>
+          )}
           {user?.rol === "ADMIN" && (
             <button className={view === "usuarios" ? "active" : ""} onClick={() => setView("usuarios")}>
               <Users size={18} /> Usuarios
@@ -382,7 +429,7 @@ function App() {
             </button>
           )}
           <button className={view === "pedidos" ? "active" : ""} onClick={() => setView("pedidos")}>
-            <ClipboardList size={18} /> Pedidos
+            <ClipboardList size={18} /> {isCliente ? "Mis pedidos" : "Pedidos"}
           </button>
           {!isCliente && (
             <button className={view === "ventas" ? "active" : ""} onClick={() => setView("ventas")}>
@@ -400,10 +447,11 @@ function App() {
           {status && <span>{status}</span>}
         </header>
         <div className="metrics">
-          <Metric icon={<Boxes />} label="Productos" value={productos.length} onClick={() => setView("productos")} />
+          <Metric icon={<Boxes />} label={isCliente ? "Disponibles" : "Productos"} value={productos.length} onClick={() => setView("productos")} />
           {!isCliente && <Metric icon={<Users />} label="Clientes" value={clientes.length} onClick={() => setView("clientes")} />}
-          <Metric icon={<ClipboardList />} label="Pedidos" value={pedidos.length} onClick={() => setView("pedidos")} />
+          <Metric icon={<ClipboardList />} label={isCliente ? "Mi historial" : "Pedidos"} value={pedidos.length} onClick={() => setView("pedidos")} />
           {!isCliente && <Metric icon={<Bell />} label="Pendientes" value={pedidosPendientes.length} onClick={() => setView("pedidos")} />}
+          {!isCliente && <Metric icon={<AlertTriangle />} label="Stock bajo" value={productosStockBajo.length} onClick={() => setView("inventario")} />}
           {!isCliente && <Metric icon={<ReceiptText />} label="Ventas" value={ventas.length} onClick={() => setView("ventas")} />}
         </div>
         {!isCliente && pedidosPendientes.length > 0 && (
@@ -411,15 +459,22 @@ function App() {
             <Bell size={18} /> Hay {pedidosPendientes.length} pedido(s) pendiente(s) por confirmar
           </button>
         )}
-        {view === "dashboard" && (
+        {!isCliente && productosStockBajo.length > 0 && (
+          <button className="notification-banner danger" type="button" onClick={() => setView("inventario")}>
+            <AlertTriangle size={18} /> Hay {productosStockBajo.length} producto(s) en stock bajo
+          </button>
+        )}
+        {!isCliente && view === "dashboard" && (
           <>
             <section className="dashboard-grid">
+              <LowStockPanel productos={productosStockBajo} />
               <InventoryPanel inventario={inventario} />
               <RecentOrdersPanel pedidos={pedidos} />
+              <InventoryMovementsPanel movimientos={movimientosInventario} />
             </section>
           </>
         )}
-        {view === "inventario" && (
+        {!isCliente && view === "inventario" && (
           <section className="management-grid">
             <div className="panel">
               <h2><Boxes size={18} /> Producto nuevo</h2>
@@ -514,6 +569,15 @@ function App() {
                   <option value="SALIDA">Salida</option>
                   <option value="AJUSTE">Ajuste exacto</option>
                 </select>
+                <select name="motivo" defaultValue="">
+                  <option value="">Motivo de baja</option>
+                  <option value="MERMA">Merma</option>
+                  <option value="VENCIDO">Producto vencido</option>
+                  <option value="DANO">Producto danado</option>
+                  <option value="DEVOLUCION_PROVEEDOR">Devolucion a proveedor</option>
+                  <option value="CONTEO_FISICO">Conteo fisico</option>
+                  <option value="OTRO">Otro</option>
+                </select>
                 <input name="cantidad" type="number" min="1" step="1" placeholder="Cantidad" required />
                 <input name="nota" placeholder="Nota" />
                 <button type="submit">Guardar</button>
@@ -522,9 +586,15 @@ function App() {
             <div className="wide-panel">
               <InventoryPanel inventario={inventario} />
             </div>
+            <div className="wide-panel">
+              <LowStockPanel productos={productosStockBajo} />
+            </div>
+            <div className="wide-panel">
+              <InventoryMovementsPanel movimientos={movimientosInventario} />
+            </div>
           </section>
         )}
-        {view === "usuarios" && (
+        {!isCliente && view === "usuarios" && (
           <section className="management-grid">
           <div className="panel">
             <h2><UserPlus size={18} /> Usuario rapido</h2>
@@ -536,6 +606,13 @@ function App() {
                 <option value="ADMIN">Administrador</option>
                 <option value="VENDEDOR">Vendedor</option>
                 <option value="ALMACEN">Almacen</option>
+                <option value="CLIENTE">Cliente</option>
+              </select>
+              <select name="clienteId" defaultValue="">
+                <option value="">Cliente asociado</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>
+                ))}
               </select>
               <button type="submit">Guardar</button>
             </form>
@@ -543,24 +620,55 @@ function App() {
           <UsersPanel usuarios={usuarios} onToggleUser={handleToggleUser} />
         </section>
         )}
-        {view === "clientes" && (
+        {!isCliente && view === "clientes" && (
           <section className="management-grid">
             <div className="panel">
-              <h2><UserPlus size={18} /> Cliente rapido</h2>
+              <h2><UserPlus size={18} /> Cliente nuevo</h2>
               <form className="compact-form" onSubmit={handleCreateCliente}>
-                <input name="nombre" placeholder="Nombre" required />
-                <input name="empresa" placeholder="Empresa" />
-                <input name="telefono" placeholder="Telefono" />
-                <input name="direccion" placeholder="Direccion" />
-                <input name="rfc" placeholder="RFC" />
-                <input name="limiteCredito" type="number" min="0" step="0.01" placeholder="Limite de credito" defaultValue="0" />
+                <label>
+                  Nombre del cliente
+                  <input name="nombre" placeholder="Nombre" required />
+                </label>
+                <label>
+                  Empresa
+                  <input name="empresa" placeholder="Empresa" />
+                </label>
+                <label>
+                  Telefono
+                  <input name="telefono" placeholder="Telefono" />
+                </label>
+                <label>
+                  Direccion
+                  <input name="direccion" placeholder="Direccion" />
+                </label>
+                <label>
+                  RFC
+                  <input name="rfc" placeholder="RFC" />
+                </label>
+                <label>
+                  Limite de credito
+                  <input name="limiteCredito" type="number" min="0" step="0.01" placeholder="Limite de credito" defaultValue="0" />
+                </label>
+                <div className="form-section-title">Acceso del cliente</div>
+                <label>
+                  Nombre de usuario
+                  <input name="usuarioNombre" placeholder="Nombre para iniciar sesion" required />
+                </label>
+                <label>
+                  Correo de usuario
+                  <input name="usuarioEmail" type="email" placeholder="Correo para login" required />
+                </label>
+                <label>
+                  Contrasena
+                  <input name="usuarioPassword" type="password" placeholder="Contrasena" minLength="6" required />
+                </label>
                 <button type="submit">Guardar</button>
               </form>
             </div>
             <ClientsPanel clientes={clientes} />
           </section>
         )}
-        {view === "productos" && <ProductsPanel productos={productos} />}
+        {view === "productos" && <ProductsPanel isCliente={isCliente} productos={productos} />}
         {view === "pedidos" && (
           <OrdersPanel
             clientes={clientes}
@@ -572,7 +680,7 @@ function App() {
             onUpdateEstado={handleUpdatePedidoEstado}
           />
         )}
-        {view === "ventas" && (
+        {!isCliente && view === "ventas" && (
           <SalesPanel
             productos={productos}
             ventas={ventas}
@@ -614,6 +722,73 @@ function InventoryPanel({ inventario }) {
       </table>
     </section>
   );
+}
+
+function LowStockPanel({ productos }) {
+  return (
+    <section className="panel">
+      <h2><AlertTriangle size={18} /> Stock bajo</h2>
+      {productos.length === 0 ? (
+        <p className="empty-state">No hay productos por debajo del minimo.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr><th>Producto</th><th>Disponible</th><th>Minimo</th><th>Faltan</th></tr>
+          </thead>
+          <tbody>
+            {productos.map((producto) => (
+              <tr key={producto.id}>
+                <td>{producto.nombre}</td>
+                <td>{producto.disponible}</td>
+                <td>{producto.stockMinimo}</td>
+                <td>{Math.max(producto.stockMinimo - producto.disponible, 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function InventoryMovementsPanel({ movimientos }) {
+  return (
+    <section className="panel">
+      <h2><History size={18} /> Movimientos de inventario</h2>
+      {movimientos.length === 0 ? (
+        <p className="empty-state">Todavia no hay movimientos registrados.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cantidad</th><th>Motivo</th><th>Referencia</th><th>Nota</th></tr>
+          </thead>
+          <tbody>
+            {movimientos.slice(0, 12).map((movimiento) => (
+              <tr key={movimiento.id}>
+                <td>{new Date(movimiento.createdAt).toLocaleDateString()}</td>
+                <td>{movimiento.producto?.nombre || "-"}</td>
+                <td><span className={`movement-badge ${movimiento.tipo.toLowerCase()}`}>{movimiento.tipo}</span></td>
+                <td>{movimiento.cantidad}</td>
+                <td>{formatMovementReason(movimiento)}</td>
+                <td>{movimiento.referencia || "-"}</td>
+                <td>{movimiento.nota || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function formatMovementReason(movimiento) {
+  if (!movimiento.referencia?.startsWith("BAJA_")) return "-";
+
+  return movimiento.referencia
+    .replace("BAJA_", "")
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function RecentOrdersPanel({ pedidos }) {
@@ -660,7 +835,7 @@ function ClientsPanel({ clientes }) {
       <h2><Users size={18} /> Clientes</h2>
       <table>
         <thead>
-          <tr><th>Nombre</th><th>Empresa</th><th>Telefono</th><th>Credito</th><th>Saldo</th><th>Estado</th></tr>
+          <tr><th>Nombre</th><th>Empresa</th><th>Telefono</th><th>Usuario</th><th>Credito</th><th>Saldo</th><th>Estado</th></tr>
         </thead>
         <tbody>
           {clientes.map((cliente) => (
@@ -668,6 +843,7 @@ function ClientsPanel({ clientes }) {
               <td>{cliente.nombre}</td>
               <td>{cliente.empresa || "-"}</td>
               <td>{cliente.telefono || "-"}</td>
+              <td>{cliente.usuarios?.map((usuario) => usuario.email).join(", ") || "-"}</td>
               <td>Q {Number(cliente.limiteCredito).toFixed(2)}</td>
               <td>Q {Number(cliente.saldoPendiente).toFixed(2)}</td>
               <td>{cliente.activo ? "Activo" : "Inactivo"}</td>
@@ -695,20 +871,23 @@ function getFormDetalles(form) {
     .filter((detalle) => detalle.productoId && Number(detalle.cantidad) > 0);
 }
 
-function ProductsPanel({ productos }) {
+function ProductsPanel({ isCliente = false, productos }) {
   return (
     <section className="panel">
-      <h2><Boxes size={18} /> Productos</h2>
-      <ProductsTable productos={productos} />
+      <h2><Boxes size={18} /> {isCliente ? "Productos disponibles" : "Productos"}</h2>
+      <ProductsTable isCliente={isCliente} productos={productos} />
     </section>
   );
 }
 
-function ProductsTable({ productos }) {
+function ProductsTable({ productos, isCliente = false }) {
   return (
     <table>
       <thead>
-        <tr><th>SKU</th><th>Nombre</th><th>Categoria</th><th>Marca</th><th>Unidad</th><th>Disponible</th><th>Precio</th><th>Estado</th></tr>
+        <tr>
+          <th>SKU</th><th>Nombre</th><th>Categoria</th><th>Marca</th><th>Unidad</th><th>Disponible</th><th>Precio</th>
+          {!isCliente && <th>Estado</th>}
+        </tr>
       </thead>
       <tbody>
         {productos.map((producto) => (
@@ -720,7 +899,7 @@ function ProductsTable({ productos }) {
             <td>{producto.unidad}</td>
             <td>{getAvailableStock(producto)}</td>
             <td>Q {Number(producto.precioVenta).toFixed(2)}</td>
-            <td>{producto.activo ? "Activo" : "Inactivo"}</td>
+            {!isCliente && <td>{producto.activo ? "Activo" : "Inactivo"}</td>}
           </tr>
         ))}
       </tbody>
@@ -760,6 +939,7 @@ function OrdersPanel({ clientes, isCliente, canUpdatePedidoEstado, pedidos, prod
       <div className="panel">
         <h2><ClipboardList size={18} /> {isCliente ? "Mis pedidos" : "Pedidos"}</h2>
         <OrdersTable
+          isCliente={isCliente}
           pedidos={pedidos}
           onUpdateEstado={canUpdatePedidoEstado ? onUpdateEstado : null}
         />
@@ -792,18 +972,23 @@ function OrderItemFields({ productos, index }) {
   );
 }
 
-function OrdersTable({ pedidos, onUpdateEstado }) {
+function OrdersTable({ isCliente = false, pedidos, onUpdateEstado }) {
   return (
     <table>
       <thead>
-        <tr><th>ID</th><th>Cliente</th><th>Vendedor</th><th>Estado</th><th>Items</th><th>Total</th></tr>
+        <tr>
+          <th>ID</th>
+          {!isCliente && <th>Cliente</th>}
+          {!isCliente && <th>Vendedor</th>}
+          <th>Estado</th><th>Items</th><th>Total</th><th>Fecha</th>
+        </tr>
       </thead>
       <tbody>
         {pedidos.map((pedido) => (
           <tr key={pedido.id}>
             <td>#{pedido.id}</td>
-            <td>{pedido.cliente.nombre}</td>
-            <td>{pedido.vendedor?.nombre || "-"}</td>
+            {!isCliente && <td>{pedido.cliente.nombre}</td>}
+            {!isCliente && <td>{pedido.vendedor?.nombre || "-"}</td>}
             <td>
               {onUpdateEstado ? (
                 <select
@@ -819,6 +1004,7 @@ function OrdersTable({ pedidos, onUpdateEstado }) {
             </td>
             <td>{pedido.detalles?.reduce((sum, detalle) => sum + detalle.cantidad, 0) || 0}</td>
             <td>Q {Number(pedido.total).toFixed(2)}</td>
+            <td>{new Date(pedido.createdAt).toLocaleDateString()}</td>
           </tr>
         ))}
       </tbody>
