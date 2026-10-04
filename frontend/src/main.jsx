@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AlertTriangle, Bell, Boxes, ClipboardList, History, Leaf, LogIn, ReceiptText, UserPlus, Users } from "lucide-react";
 import "./styles.css";
+import { BarcodeCameraButton, BarcodeInput } from "./BarcodeCamera.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
@@ -515,9 +516,7 @@ function App() {
                   Nombre del producto
                   <input name="nombre" placeholder="Nombre del producto" required />
                 </label>
-                <label>Código de barras (opcional)
-                  <input name="codigoBarras" maxLength="100" placeholder="Escanea el código del producto" onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }} />
-                </label>
+                <BarcodeInput />
                 <label>
                   Descripcion
                   <input name="descripcion" placeholder="Descripcion" />
@@ -749,8 +748,8 @@ function InventoryEntryForm({ productos, almacenes, inventario, onSubmit, saving
   const stockActual = inventario.find((item) => item.productoId === Number(productoId) && item.almacenId === Number(almacenId))?.cantidad ?? 0;
   const cantidadValida = Number.isInteger(Number(cantidad)) && Number(cantidad) > 0;
   const insuficiente = tipo === "SALIDA" && cantidadValida && Number(cantidad) > stockActual;
-  function scan() {
-    const producto = productos.find((item) => item.activo && item.codigoBarras === codigo.trim());
+  function scan(scannedCode = codigo) {
+    const producto = productos.find((item) => item.activo && item.codigoBarras === scannedCode.trim());
     if (!producto) {
       setProductoId("");
       setCantidad("");
@@ -769,7 +768,8 @@ function InventoryEntryForm({ productos, almacenes, inventario, onSubmit, saving
       <form className="compact-form" onSubmit={(event) => { if (insuficiente) { event.preventDefault(); return; } onSubmit(event); }} onReset={() => { setProductoId(""); setAlmacenId(""); setCantidad(""); setCodigo(""); setScanStatus(""); }}>
         <label>Operación<select name="tipo" value={tipo} onChange={(event) => setTipo(event.target.value)}><option value="ENTRADA">Alta: agregar existencias</option><option value="SALIDA">Baja: retirar existencias</option></select></label>
         <label>Escanear código de barras<input value={codigo} maxLength="100" onChange={(event) => setCodigo(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); scan(); } }} placeholder="Código de barras" /></label>
-        <button type="button" onClick={scan} disabled={saving || !codigo.trim()}>Buscar código</button>
+        <button type="button" onClick={() => scan()} disabled={saving || !codigo.trim()}>Buscar código</button>
+        <BarcodeCameraButton disabled={saving} onDetected={(code) => { setCodigo(code); scan(code); }} />
         {scanStatus && <p role="status">{scanStatus}</p>}
         <label>Producto
           <select name="productoId" required value={productoId} onChange={(event) => { setProductoId(event.target.value); setCantidad(""); setScanStatus(""); }}>
@@ -820,7 +820,7 @@ function BarcodeAssignmentForm({ productos, api, onSaved }) {
     <p>Selecciona el producto y escanea su código. Guardar reemplaza el código anterior.</p>
     <form className="compact-form" onSubmit={submit}>
       <label>Producto<select name="productoId" required defaultValue=""><option value="">Selecciona un producto</option>{productos.filter((producto) => producto.activo).map((producto) => <option key={producto.id} value={producto.id}>{producto.nombre} — {producto.codigoBarras || "Sin código"}</option>)}</select></label>
-      <label>Código de barras<input name="codigoBarras" required maxLength="100" onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }} /></label>
+      <BarcodeInput required />
       <button disabled={saving} type="submit">{saving ? "Guardando…" : "Guardar código"}</button>
       {message && <p role="status">{message}</p>}
     </form>

@@ -16,6 +16,7 @@
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "@vitejs/plugin-react": "^4.7.0",
+    "@zxing/browser": "^0.2.1",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

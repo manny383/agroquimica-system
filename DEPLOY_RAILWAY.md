@@ -49,6 +49,10 @@ La carga `npm run seed` se retiró del arranque automático porque restablece la
 - Intentar retirar más unidades que las disponibles: debe bloquearse.
 - Crear un producto con código y stock inicial; verificar el producto y sus existencias.
 
-La cámara del teléfono y la impresión de etiquetas no forman parte de esta versión.
+El frontend incluye el botón **Escanear con cámara** para registrar códigos, vincularlos y buscar productos en altas/bajas. Publicar también `frontend/package.json` y `frontend/package-lock.json` para instalar el lector ZXing en Railway.
+
+Probar desde el celular usando la URL HTTPS del frontend y permitir el acceso a la cámara. La cámara trasera se solicita cuando está disponible. Una lectura cierra la cámara y carga el código; el usuario debe confirmar el formulario para guardar. Verificar también el cierre manual, permisos denegados y códigos no registrados. El acceso desde una IP local mediante HTTP puede impedir el uso de la cámara; usar HTTPS o localhost.
+
+La impresión de etiquetas no forma parte de esta versión.
 
 Referencia: https://docs.railway.com/deployments/monorepo
