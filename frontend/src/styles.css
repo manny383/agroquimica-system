@@ -7,6 +7,10 @@
 * { box-sizing: border-box; }
 body { margin: 0; }
 button, input, select { font: inherit; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.inventory-adjustments { margin-top: 28px; border-top: 1px solid #dce5de; padding-top: 18px; }
+.inventory-adjustments summary { cursor: pointer; font-weight: 600; }
+.inventory-stock-preview { background: #edf7ef; border-radius: 8px; padding: 12px; margin: 0; color: #245b35; }
 
 button {
   align-items: center;

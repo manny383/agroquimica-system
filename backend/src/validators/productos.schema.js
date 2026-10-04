@@ -3,6 +3,7 @@ import { z } from "zod";
 export const createProductoSchema = z.object({
   body: z.object({
     sku: z.string().min(2),
+    codigoBarras: z.string().trim().min(1).max(100).optional(),
     nombre: z.string().min(2),
     descripcion: z.string().optional(),
     unidad: z.string().min(1).default("unidad"),
@@ -16,4 +17,9 @@ export const createProductoSchema = z.object({
       nota: z.string().optional(),
     }).optional(),
   }),
+});
+
+export const codigoBarrasSchema = z.object({
+  params: z.object({ id: z.coerce.number().int().positive() }),
+  body: z.object({ codigoBarras: z.string().trim().min(1).max(100) }),
 });

@@ -22,6 +22,7 @@ function App() {
   const [usuarios, setUsuarios] = useState([]);
   const [view, setView] = useState("dashboard");
   const [status, setStatus] = useState("");
+  const [inventorySaving, setInventorySaving] = useState(false);
   const pedidosPendientes = useMemo(
     () => pedidos.filter((pedido) => pedido.estado === "PENDIENTE"),
     [pedidos],
@@ -200,8 +201,10 @@ function App() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
 
+    if (inventorySaving) return;
+    setInventorySaving(true);
     try {
-      await api("/inventario/ajustes", {
+      const resultado = await api("/inventario/ajustes", {
         method: "POST",
         body: JSON.stringify({
           productoId: form.get("productoId"),
@@ -213,10 +216,12 @@ function App() {
         }),
       });
       formElement.reset();
-      setStatus("Inventario actualizado");
+      setStatus(`${resultado.producto.nombre}: inventario actualizado. Stock en ${resultado.almacen.nombre}: ${resultado.cantidad}.`);
       loadData();
     } catch (error) {
       setStatus(error.message);
+    } finally {
+      setInventorySaving(false);
     }
   }
 
@@ -232,12 +237,29 @@ function App() {
     const marcaNueva = form.get("marcaNueva")?.trim();
     const payload = {
       sku: form.get("sku"),
+      codigoBarras: form.get("codigoBarras")?.trim() || undefined,
       nombre: form.get("nombre"),
       descripcion: form.get("descripcion"),
       unidad: form.get("unidad"),
       precioVenta: form.get("precioVenta"),
       stockMinimo: form.get("stockMinimo"),
     };
+
+    if (inventorySaving) return;
+    if (productos.some((producto) => producto.sku.toLowerCase() === String(payload.sku).trim().toLowerCase())) {
+      setStatus("Ese SKU ya está registrado. Usa Agregar existencias para ingresar más unidades.");
+      return;
+    }
+    payload.sku = String(payload.sku).trim();
+    payload.nombre = String(payload.nombre).trim();
+    if (payload.codigoBarras && productos.some((producto) => producto.codigoBarras === payload.codigoBarras)) {
+      setStatus("Ese código de barras ya está registrado. Usa Agregar existencias.");
+      return;
+    }
+    if (!payload.sku || !payload.nombre) {
+      setStatus("Completa el SKU y el nombre del producto.");
+      return;
+    }
 
     if (almacenId && cantidadInicial !== "") {
       payload.inventarioInicial = {
@@ -247,6 +269,7 @@ function App() {
       };
     }
 
+    setInventorySaving(true);
     try {
       if (categoriaNueva) {
         const categoria = await api("/categorias", {
@@ -287,10 +310,14 @@ function App() {
       }
 
       formElement.reset();
-      setStatus("Producto e inventario creados");
+      const stock = producto.inventario?.find((item) => item.almacenId === Number(almacenId));
+      const almacen = almacenes.find((item) => item.id === Number(almacenId));
+      setStatus(`${producto.nombre}: producto creado. Stock en ${almacen?.nombre || "el almacén"}: ${stock?.cantidad ?? cantidadInicial}.`);
       loadData();
     } catch (error) {
       setStatus(error.message);
+    } finally {
+      setInventorySaving(false);
     }
   }
 
@@ -477,7 +504,8 @@ function App() {
         {!isCliente && view === "inventario" && (
           <section className="management-grid">
             <div className="panel">
-              <h2><Boxes size={18} /> Producto nuevo</h2>
+              <h2><Boxes size={18} /> Nuevo producto</h2>
+              <p>Registra el producto y sus primeras existencias en un almacén.</p>
               <form className="compact-form" onSubmit={handleCreateProductWithInventory}>
                 <label>
                   SKU
@@ -486,6 +514,9 @@ function App() {
                 <label>
                   Nombre del producto
                   <input name="nombre" placeholder="Nombre del producto" required />
+                </label>
+                <label>Código de barras (opcional)
+                  <input name="codigoBarras" maxLength="100" placeholder="Escanea el código del producto" onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }} />
                 </label>
                 <label>
                   Descripcion
@@ -546,10 +577,15 @@ function App() {
                   Nota de inventario
                   <input name="nota" placeholder="Nota de inventario" />
                 </label>
-                <button type="submit">Crear producto</button>
+                <button type="submit" disabled={inventorySaving || !almacenes.length}>{inventorySaving ? "Guardando…" : "Crear producto y agregar stock"}</button>
+                {!almacenes.length && <p role="status">Necesitas un almacén registrado para ingresar existencias.</p>}
               </form>
             </div>
             <div className="panel">
+              <InventoryEntryForm productos={productos} almacenes={almacenes} inventario={inventario} onSubmit={handleAdjustInventory} saving={inventorySaving} />
+              {user?.rol === "ADMIN" && <BarcodeAssignmentForm productos={productos} api={api} onSaved={loadData} />}
+              <details className="inventory-adjustments">
+              <summary>Otras operaciones: salidas y ajustes</summary>
               <h2><Boxes size={18} /> Ajuste de inventario</h2>
               <form className="compact-form" onSubmit={handleAdjustInventory}>
                 <select name="productoId" defaultValue="" required>
@@ -580,8 +616,9 @@ function App() {
                 </select>
                 <input name="cantidad" type="number" min="1" step="1" placeholder="Cantidad" required />
                 <input name="nota" placeholder="Nota" />
-                <button type="submit">Guardar</button>
+                <button type="submit" disabled={inventorySaving}>{inventorySaving ? "Guardando…" : "Guardar ajuste"}</button>
               </form>
+              </details>
             </div>
             <div className="wide-panel">
               <InventoryPanel inventario={inventario} />
@@ -701,6 +738,94 @@ const viewTitles = {
   pedidos: "Gestion de pedidos",
   ventas: "Gestion de ventas",
 };
+
+function InventoryEntryForm({ productos, almacenes, inventario, onSubmit, saving }) {
+  const [productoId, setProductoId] = useState("");
+  const [almacenId, setAlmacenId] = useState("");
+  const [cantidad, setCantidad] = useState("");
+  const [tipo, setTipo] = useState("ENTRADA");
+  const [codigo, setCodigo] = useState("");
+  const [scanStatus, setScanStatus] = useState("");
+  const stockActual = inventario.find((item) => item.productoId === Number(productoId) && item.almacenId === Number(almacenId))?.cantidad ?? 0;
+  const cantidadValida = Number.isInteger(Number(cantidad)) && Number(cantidad) > 0;
+  const insuficiente = tipo === "SALIDA" && cantidadValida && Number(cantidad) > stockActual;
+  function scan() {
+    const producto = productos.find((item) => item.activo && item.codigoBarras === codigo.trim());
+    if (!producto) {
+      setProductoId("");
+      setCantidad("");
+      setScanStatus("Código no registrado. Crea el producto o vincula este código a uno existente.");
+      return;
+    }
+    setCantidad((actual) => String(productoId === String(producto.id) ? (Number(actual) || 0) + 1 : 1));
+    setProductoId(String(producto.id));
+    setScanStatus(`${producto.nombre} seleccionado. Cada lectura suma una unidad; revisa la cantidad antes de confirmar.`);
+    setCodigo("");
+  }
+  return (
+    <>
+      <h2><Boxes size={18} /> Altas y bajas de existencias</h2>
+      <p>Escanea con un lector USB o escribe el código y pulsa Buscar. Revisa el movimiento antes de confirmarlo.</p>
+      <form className="compact-form" onSubmit={(event) => { if (insuficiente) { event.preventDefault(); return; } onSubmit(event); }} onReset={() => { setProductoId(""); setAlmacenId(""); setCantidad(""); setCodigo(""); setScanStatus(""); }}>
+        <label>Operación<select name="tipo" value={tipo} onChange={(event) => setTipo(event.target.value)}><option value="ENTRADA">Alta: agregar existencias</option><option value="SALIDA">Baja: retirar existencias</option></select></label>
+        <label>Escanear código de barras<input value={codigo} maxLength="100" onChange={(event) => setCodigo(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); scan(); } }} placeholder="Código de barras" /></label>
+        <button type="button" onClick={scan} disabled={saving || !codigo.trim()}>Buscar código</button>
+        {scanStatus && <p role="status">{scanStatus}</p>}
+        <label>Producto
+          <select name="productoId" required value={productoId} onChange={(event) => { setProductoId(event.target.value); setCantidad(""); setScanStatus(""); }}>
+            <option value="">Selecciona un producto</option>
+            {productos.filter((producto) => producto.activo).map((producto) => <option key={producto.id} value={producto.id}>{producto.nombre} — {producto.sku}</option>)}
+          </select>
+        </label>
+        <label>Almacén
+          <select name="almacenId" required value={almacenId} onChange={(event) => setAlmacenId(event.target.value)}>
+            <option value="">Selecciona un almacén</option>
+            {almacenes.map((almacen) => <option key={almacen.id} value={almacen.id}>{almacen.nombre}</option>)}
+          </select>
+        </label>
+        <label>{tipo === "ENTRADA" ? "Cantidad a ingresar" : "Cantidad a retirar"}
+          <input name="cantidad" type="number" min="1" step="1" required value={cantidad} onChange={(event) => setCantidad(event.target.value)} placeholder="Ej. 20" />
+        </label>
+        {productoId && almacenId && <p className="inventory-stock-preview" aria-live="polite">Stock actual: <strong>{stockActual}</strong>{cantidadValida && !insuficiente && <> · Stock después del movimiento: <strong>{stockActual + (tipo === "ENTRADA" ? 1 : -1) * Number(cantidad)}</strong></>}</p>}
+        {insuficiente && <p role="alert">No hay existencias suficientes en este almacén.</p>}
+        {tipo === "SALIDA" && <label>Motivo de baja<select name="motivo" required defaultValue=""><option value="">Selecciona un motivo</option><option value="VENTA">Venta</option><option value="MERMA">Merma</option><option value="VENCIDO">Vencimiento</option><option value="DANO">Daño</option><option value="DEVOLUCION_PROVEEDOR">Devolución a proveedor</option><option value="OTRO">Otro</option></select></label>}
+        <label>Nota (opcional)<input name="nota" placeholder="Ej. Recepción de mercadería" /></label>
+        <button type="submit" disabled={saving || insuficiente || !productos.some((producto) => producto.activo) || !almacenes.length}>{saving ? "Guardando…" : tipo === "ENTRADA" ? "Confirmar alta" : "Confirmar baja"}</button>
+      </form>
+    </>
+  );
+}
+
+function BarcodeAssignmentForm({ productos, api, onSaved }) {
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  async function submit(event) {
+    event.preventDefault();
+    if (saving) return;
+    const element = event.currentTarget;
+    const form = new FormData(element);
+    const codigoBarras = String(form.get("codigoBarras")).trim();
+    if (!codigoBarras) { setMessage("Ingresa un código de barras."); return; }
+    setSaving(true);
+    try {
+      const producto = await api(`/productos/${form.get("productoId")}/codigo-barras`, { method: "PATCH", body: JSON.stringify({ codigoBarras }) });
+      setMessage(`Código vinculado a ${producto.nombre}.`);
+      element.reset();
+      await onSaved();
+    } catch (error) { setMessage(error.message); }
+    finally { setSaving(false); }
+  }
+  return <details className="inventory-adjustments">
+    <summary>Vincular código a un producto existente</summary>
+    <p>Selecciona el producto y escanea su código. Guardar reemplaza el código anterior.</p>
+    <form className="compact-form" onSubmit={submit}>
+      <label>Producto<select name="productoId" required defaultValue=""><option value="">Selecciona un producto</option>{productos.filter((producto) => producto.activo).map((producto) => <option key={producto.id} value={producto.id}>{producto.nombre} — {producto.codigoBarras || "Sin código"}</option>)}</select></label>
+      <label>Código de barras<input name="codigoBarras" required maxLength="100" onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }} /></label>
+      <button disabled={saving} type="submit">{saving ? "Guardando…" : "Guardar código"}</button>
+      {message && <p role="status">{message}</p>}
+    </form>
+  </details>;
+}
 
 function InventoryPanel({ inventario }) {
   return (

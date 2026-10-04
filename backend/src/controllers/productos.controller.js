@@ -17,6 +17,20 @@ export async function listProductos(req, res, next) {
   }
 }
 
+export async function updateCodigoBarras(req, res, next) {
+  try {
+    const producto = await prisma.producto.update({
+      where: { id: req.validated.params.id },
+      data: { codigoBarras: req.validated.body.codigoBarras },
+    });
+    return res.json(producto);
+  } catch (error) {
+    if (error.code === "P2002") return res.status(409).json({ message: "Ese código de barras ya pertenece a otro producto." });
+    if (error.code === "P2025") return res.status(404).json({ message: "Producto no encontrado." });
+    return next(error);
+  }
+}
+
 export async function createProducto(req, res, next) {
   try {
     const { inventarioInicial, ...data } = req.validated.body;
@@ -52,6 +66,7 @@ export async function createProducto(req, res, next) {
 
     return res.status(201).json(producto);
   } catch (error) {
+    if (error.code === "P2002") return res.status(409).json({ message: "El SKU o código de barras ya está registrado." });
     return next(error);
   }
 }

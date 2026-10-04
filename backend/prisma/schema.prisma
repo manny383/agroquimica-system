@@ -60,6 +60,7 @@ model Marca {
 model Producto {
   id           Int      @id @default(autoincrement())
   sku          String   @unique
+  codigoBarras String?  @unique @db.VarChar(100)
   nombre       String
   descripcion  String?
   unidad       String   @default("unidad")
