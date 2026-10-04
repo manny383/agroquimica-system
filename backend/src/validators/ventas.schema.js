@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const createVentaSchema = z.object({
   body: z.object({
+    almacenId: z.coerce.number().int().positive().optional(),
     observaciones: z.string().optional(),
     detalles: z.array(
       z.object({

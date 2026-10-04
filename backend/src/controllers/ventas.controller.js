@@ -1,10 +1,10 @@
 import { prisma } from "../config/prisma.js";
 
-async function descontarInventario(tx, detalles, productos, referencia, nota) {
+async function descontarInventario(tx, detalles, productos, referencia, nota, almacenId) {
   for (const detalle of detalles) {
     let pendiente = detalle.cantidad;
     const inventarios = await tx.inventario.findMany({
-      where: { productoId: detalle.productoId, cantidad: { gt: 0 } },
+      where: { productoId: detalle.productoId, cantidad: { gt: 0 }, ...(almacenId ? { almacenId } : {}) },
       orderBy: { id: "asc" },
     });
 
@@ -23,10 +23,15 @@ async function descontarInventario(tx, detalles, productos, referencia, nota) {
       const salida = Math.min(inventario.cantidad, pendiente);
       pendiente -= salida;
 
-      await tx.inventario.update({
-        where: { id: inventario.id },
-        data: { cantidad: inventario.cantidad - salida },
+      const actualizado = await tx.inventario.updateMany({
+        where: { id: inventario.id, cantidad: { gte: salida } },
+        data: { cantidad: { decrement: salida } },
       });
+      if (actualizado.count !== 1) {
+        const error = new Error("El stock cambió durante la venta. Actualiza el inventario y vuelve a intentarlo.");
+        error.status = 409;
+        throw error;
+      }
 
       await tx.movimientoInventario.create({
         data: {
@@ -56,7 +61,7 @@ export async function listVentas(_req, res, next) {
 
 export async function createVenta(req, res, next) {
   try {
-    const { observaciones, detalles } = req.validated.body;
+    const { observaciones, detalles, almacenId } = req.validated.body;
     const empleadoId = req.user.id;
 
     const venta = await prisma.$transaction(async (tx) => {
@@ -72,6 +77,11 @@ export async function createVenta(req, res, next) {
           error.status = 404;
           throw error;
         }
+        if (!producto.activo) {
+          const error = new Error(`El producto ${producto.nombre} está inactivo`);
+          error.status = 409;
+          throw error;
+        }
 
         const precioUnitario = Number(producto.precioVenta);
         return {
@@ -82,7 +92,7 @@ export async function createVenta(req, res, next) {
         };
       });
 
-      await descontarInventario(tx, detallesConPrecio, productos, "VENTA_DIRECTA", observaciones);
+      await descontarInventario(tx, detallesConPrecio, productos, "VENTA_DIRECTA", observaciones, almacenId);
 
       const total = detallesConPrecio.reduce((sum, detalle) => sum + detalle.subtotal, 0);
 

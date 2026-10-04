@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 export function BarcodeCameraButton({ onDetected, disabled = false }) {
   const [open, setOpen] = useState(false);
@@ -49,7 +50,9 @@ function CameraScanner({ onDetected, onClose }) {
         stop();
         if (cancelled) return;
         const messages = {
-          NotAllowedError: "Permite el acceso a la cámara en el navegador y vuelve a intentarlo.",
+          NotAllowedError: Capacitor.isNativePlatform()
+            ? "Permite el acceso a la cámara del teléfono. Si el permiso quedó bloqueado, abre Ajustes → Aplicaciones → Agroquimica → Permisos → Cámara y habilítalo."
+            : "Permite el acceso a la cámara en el navegador y vuelve a intentarlo.",
           NotFoundError: "No se encontró una cámara. Puedes usar un lector USB o ingresar el código manualmente.",
           NotReadableError: "No se pudo abrir la cámara. Cierra otras aplicaciones que la estén usando y vuelve a intentarlo.",
         };

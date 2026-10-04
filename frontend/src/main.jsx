@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { AlertTriangle, Bell, Boxes, ClipboardList, History, Leaf, LogIn, ReceiptText, UserPlus, Users } from "lucide-react";
 import "./styles.css";
 import { BarcodeCameraButton, BarcodeInput } from "./BarcodeCamera.jsx";
+import SaleCart from "./SaleCart.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
@@ -24,6 +25,7 @@ function App() {
   const [view, setView] = useState("dashboard");
   const [status, setStatus] = useState("");
   const [inventorySaving, setInventorySaving] = useState(false);
+  const [saleSaving, setSaleSaving] = useState(false);
   const pedidosPendientes = useMemo(
     () => pedidos.filter((pedido) => pedido.estado === "PENDIENTE"),
     [pedidos],
@@ -372,20 +374,24 @@ function App() {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-
+    if (saleSaving) return;
+    setSaleSaving(true);
     try {
       await api("/ventas", {
         method: "POST",
         body: JSON.stringify({
           observaciones: form.get("observaciones"),
+          almacenId: form.get("almacenId"),
           detalles: getFormDetalles(form),
         }),
       });
       formElement.reset();
       setStatus("Venta registrada e inventario actualizado");
-      loadData();
+      await loadData();
     } catch (error) {
       setStatus(error.message);
+    } finally {
+      setSaleSaving(false);
     }
   }
 
@@ -718,6 +724,9 @@ function App() {
         )}
         {!isCliente && view === "ventas" && (
           <SalesPanel
+            almacenes={almacenes}
+            inventario={inventario}
+            saving={saleSaving}
             productos={productos}
             ventas={ventas}
             onCreateVenta={handleCreateVenta}
@@ -1137,7 +1146,7 @@ function OrdersTable({ isCliente = false, pedidos, onUpdateEstado }) {
   );
 }
 
-function SalesPanel({ productos, ventas, onCreateVenta }) {
+function SalesPanel({ productos, ventas, almacenes, inventario, saving, onCreateVenta }) {
   const totalVendido = ventas.reduce((sum, venta) => sum + Number(venta.total), 0);
   const productosVendidos = ventas.reduce(
     (sum, venta) => sum + venta.detalles.reduce((detalleSum, detalle) => detalleSum + detalle.cantidad, 0),
@@ -1164,16 +1173,7 @@ function SalesPanel({ productos, ventas, onCreateVenta }) {
       <section className="management-grid">
         <div className="panel">
           <h2><ReceiptText size={18} /> Nueva venta</h2>
-          <form className="compact-form" onSubmit={onCreateVenta}>
-            <OrderItemFields productos={productos} index={1} />
-            <OrderItemFields productos={productos} index={2} />
-            <OrderItemFields productos={productos} index={3} />
-            <label>
-              Observaciones
-              <input name="observaciones" placeholder="Nota de venta o referencia" />
-            </label>
-            <button type="submit">Registrar venta</button>
-          </form>
+          <SaleCart productos={productos} almacenes={almacenes} inventario={inventario} saving={saving} onSubmit={onCreateVenta} />
         </div>
         <div className="panel">
           <h2><Boxes size={18} /> Productos disponibles</h2>
